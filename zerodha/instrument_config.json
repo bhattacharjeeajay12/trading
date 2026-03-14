@@ -1,0 +1,10 @@
+{
+  "exchange": "NSE",
+  "instruments": [
+    "NIFTY 50",
+    "RELIANCE",
+    "HDFCBANK",
+    "INFY",
+    "ICICIBANK"
+  ]
+}

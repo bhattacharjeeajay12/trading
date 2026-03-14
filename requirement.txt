@@ -1,0 +1,4 @@
+# requirements for zerodha
+
+kiteconnect
+pyotp
