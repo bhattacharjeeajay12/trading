@@ -1,4 +1,9 @@
 .venv
 .env
-secrets
-zerodha/assets/
+secrets/
+# Ignore everything inside assets
+zerodha/assets/*
+
+# But keep the folder itself
+!zerodha/assets/
+!zerodha/assets/.gitkeep
