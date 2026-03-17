@@ -1,10 +1,7 @@
-{
-  "exchange": "NSE",
-  "instruments": [
-    "NIFTY 50",
-    "RELIANCE",
-    "HDFCBANK",
-    "INFY",
-    "ICICIBANK"
-  ]
-}
+[
+  {
+    "trade_type": "INDEX_OPTIONS",
+    "exchange": "NSE",
+    "instrument_list": ["NIFTY 50"]
+  }
+]
