@@ -276,15 +276,20 @@ class NiftyOptionStreamer:
             for tick in ticks:
                 token = tick['instrument_token']
 
-                # Convert datetime objects to strings for JSON serialization
-                tick_copy = tick.copy()
-                if 'exchange_timestamp' in tick_copy and isinstance(tick_copy['exchange_timestamp'], datetime):
-                    tick_copy['exchange_timestamp'] = tick_copy['exchange_timestamp'].isoformat()
-                if 'timestamp' in tick_copy and isinstance(tick_copy['timestamp'], datetime):
-                    tick_copy['timestamp'] = tick_copy['timestamp'].isoformat()
+                # Convert tick to JSON-serializable format by handling datetime recursively
+                def convert_datetime(obj):
+                    if isinstance(obj, datetime):
+                        return obj.isoformat()
+                    elif isinstance(obj, dict):
+                        return {k: convert_datetime(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [convert_datetime(item) for item in obj]
+                    return obj
+
+                tick_serializable = convert_datetime(tick)
 
                 # Log every tick with prefix for easy parsing
-                logger.info(f"tick_data: {local_time} | {json.dumps(tick_copy)}")
+                logger.info(f"tick_data: {local_time} | {json.dumps(tick_serializable)}")
 
                 # Check if this is Nifty index tick
                 if token == self.nifty_token:
