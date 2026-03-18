@@ -3,10 +3,10 @@
 secrets/
 dev/
 # Ignore everything inside assets
-zerodha/assets/*
+assets/*
 
 # But keep the folder itself
-!zerodha/assets/
-!zerodha/assets/.gitkeep
-!zerodha/assets/loginInfo
-!zerodha/assets/loginInfo/.gitkeep
+!assets/
+!assets/.gitkeep
+!assets/loginInfo
+!assets/loginInfo/.gitkeep

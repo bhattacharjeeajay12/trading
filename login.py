@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class KiteLogin:
     """Simple Kite login using requests library"""
 
-    def __init__(self, output_dir: str = "zerodha/assets/loginInfo"):
+    def __init__(self, output_dir: str = "assets/loginInfo"):
         """Initialize with environment variables"""
         self._validate_env_vars()
 
