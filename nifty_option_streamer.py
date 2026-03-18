@@ -130,7 +130,7 @@ class NiftyOptionStreamer:
 
         # Fall back to file
         try:
-            with open(r"assets\loginInfo\access_token.txt", "r") as f:
+            with open(os.path.join("assets", "loginInfo", "access_token.txt"), "r") as f:
                 token = f.read().strip()
                 if token:
                     return token
