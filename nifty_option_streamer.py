@@ -7,9 +7,8 @@ from dotenv import load_dotenv
 from kiteconnect import KiteTicker, KiteConnect
 from typing import List, Dict, Set
 import time
-from datetime import datetime
 load_dotenv()
-
+from datetime import datetime, timezone, timedelta
 # ============================================================================
 # CONFIGURATION - Modify these parameters as needed
 # ============================================================================
@@ -33,7 +32,10 @@ logger.setLevel(logging.INFO)
 
 # Create date-based log directory structure and filename
 # Example: assets/logs/19MAR2024/ticks/19MAR2024_ticks.log
-log_date = datetime.now().strftime('%d%b%Y').upper()
+# log_date = datetime.now().strftime('%d%b%Y').upper()
+# IST is UTC+5:30
+ist = timezone(timedelta(hours=5, minutes=30))
+log_date = datetime.now(ist).strftime('%d%b%Y').upper()
 log_dir = os.path.join('assets', 'logs', log_date, 'ticks')
 log_filename = os.path.join(log_dir, f"{log_date}_ticks.log")
 
