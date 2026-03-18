@@ -132,7 +132,7 @@ def main():
         kite_login = KiteLogin()
         access_token = kite_login.run()
         print(f"\n✅ Success!")
-        print(f"Access token saved to: zerodha/assets/loginInfo/access_token.txt")
+        print(f"Access token saved to: assets/loginInfo/access_token.txt")
         print(f"Token valid until: 6:00 AM tomorrow")
         return 0
     except Exception as e:
