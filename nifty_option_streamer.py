@@ -31,10 +31,14 @@ OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Create date-based log filename (DDMMMYYYY format)
-# Example: 19MAR2024_ticks.log
+# Create date-based log directory structure and filename
+# Example: assets/logs/19MAR2024/ticks/19MAR2024_ticks.log
 log_date = datetime.now().strftime('%d%b%Y').upper()
-log_filename = f"{log_date}_ticks.log"
+log_dir = os.path.join('assets', 'logs', log_date, 'ticks')
+log_filename = os.path.join(log_dir, f"{log_date}_ticks.log")
+
+# Create directory structure if it doesn't exist
+os.makedirs(log_dir, exist_ok=True)
 
 # Rotating file handler (10MB per file, keep 5 backups)
 # When file reaches 10MB, it becomes 19MAR2024_ticks.log.1, then .2, etc.
