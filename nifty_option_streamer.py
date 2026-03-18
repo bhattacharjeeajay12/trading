@@ -3,7 +3,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 import sys
-
 from dotenv import load_dotenv
 from kiteconnect import KiteTicker, KiteConnect
 from typing import List, Dict, Set
@@ -20,7 +19,7 @@ NIFTY_INDEX_TOKEN = 256265
 
 # Number of ITM and OTM strikes to subscribe on each side of ATM
 # Example: depth=5 means ATM ± 5 strikes (11 strikes total, 22 options + 1 index)
-OPTION_DEPTH = 5
+OPTION_DEPTH = 2
 
 # Option expiry date in YYYY-MM-DD format
 # Set to None to automatically use the nearest expiry
@@ -32,9 +31,15 @@ OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Create date-based log filename (DDMMMYYYY format)
+# Example: 19MAR2024_ticks.log
+log_date = datetime.now().strftime('%d%b%Y').upper()
+log_filename = f"{log_date}_ticks.log"
+
 # Rotating file handler (10MB per file, keep 5 backups)
+# When file reaches 10MB, it becomes 19MAR2024_ticks.log.1, then .2, etc.
 file_handler = RotatingFileHandler(
-    "ticks.log",
+    log_filename,
     maxBytes=10 * 1024 * 1024,  # 10MB
     backupCount=5
 )
@@ -42,11 +47,20 @@ file_handler.setFormatter(
     logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 )
 
-# Console handler
+# Console handler - will only show non-tick messages
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(
     logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 )
+
+
+# Filter to exclude tick_data messages from console
+class NoTickDataFilter(logging.Filter):
+    def filter(self, record):
+        return not record.getMessage().startswith("tick_data:")
+
+
+console_handler.addFilter(NoTickDataFilter())
 
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
