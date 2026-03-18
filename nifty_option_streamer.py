@@ -291,7 +291,7 @@ class NiftyOptionStreamer:
     def on_ticks(self, ws, ticks):
         """Callback when ticks are received"""
         try:
-            local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            local_time = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
             for tick in ticks:
                 token = tick['instrument_token']
