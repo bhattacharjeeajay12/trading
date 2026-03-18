@@ -10,3 +10,6 @@ assets/*
 !assets/.gitkeep
 !assets/loginInfo
 !assets/loginInfo/.gitkeep
+!assets/logs
+!assets/logs/.gitkeep
+
