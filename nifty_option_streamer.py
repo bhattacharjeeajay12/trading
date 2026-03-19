@@ -10,6 +10,8 @@ import time as time_module
 
 load_dotenv()
 from datetime import datetime, timezone, timedelta, time
+from twisted.internet import reactor
+
 # ============================================================================
 # CONFIGURATION - Modify these parameters as needed
 # ============================================================================
@@ -26,7 +28,7 @@ OPTION_DEPTH = 2
 OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 
 # Market end time (IST) - streamer will auto-stop at this time
-MARKET_END_TIME = "11:04"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
+MARKET_END_TIME = "11:18"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
 
 # ============================================================================
 
@@ -360,8 +362,11 @@ class NiftyOptionStreamer:
 
         # Don't reconnect if market has ended
         if self.market_ended:
-            logger.info("Market ended. Exiting gracefully.")
-            sys.exit(0)
+            logger.info("Market ended. Stopping reactor and exiting gracefully.")
+            # Stop the Twisted reactor to unblock the main thread
+            if reactor.running:
+                reactor.callFromThread(reactor.stop)
+            return
 
         # Attempt reconnection
         if self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
