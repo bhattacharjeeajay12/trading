@@ -36,6 +36,21 @@ MARKET_END_TIME = "15:31"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes af
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
+# Custom formatter that uses IST timezone
+class ISTFormatter(logging.Formatter):
+    """Custom formatter to use IST timezone for log timestamps"""
+
+    def formatTime(self, record, datefmt=None):
+        # IST is UTC+5:30
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        dt = datetime.fromtimestamp(record.created, ist_tz)
+        if datefmt:
+            return dt.strftime(datefmt)
+        else:
+            return dt.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
+
+
 # Create date-based log directory structure and filename
 # Example: assets/logs/19MAR2024/ticks/19MAR2024_ticks.log
 # IST is UTC+5:30
@@ -55,13 +70,13 @@ file_handler = RotatingFileHandler(
     backupCount=5
 )
 file_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    ISTFormatter("%(asctime)s - %(levelname)s - %(message)s")
 )
 
 # Console handler - will only show non-tick messages
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    ISTFormatter("%(asctime)s - %(levelname)s - %(message)s")
 )
 
 
