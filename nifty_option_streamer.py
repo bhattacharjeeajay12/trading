@@ -6,9 +6,10 @@ import sys
 from dotenv import load_dotenv
 from kiteconnect import KiteTicker, KiteConnect
 from typing import List, Dict, Set
-import time
+import time as time_module
+
 load_dotenv()
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 # ============================================================================
 # CONFIGURATION - Modify these parameters as needed
 # ============================================================================
@@ -24,6 +25,9 @@ OPTION_DEPTH = 2
 # Set to None to automatically use the nearest expiry
 OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 
+# Market end time (IST) - streamer will auto-stop at this time
+MARKET_END_TIME = "15:35"  # 3:35 PM IST (5 minutes after market close)
+
 # ============================================================================
 
 # Configure logging at module level
@@ -32,7 +36,6 @@ logger.setLevel(logging.INFO)
 
 # Create date-based log directory structure and filename
 # Example: assets/logs/19MAR2024/ticks/19MAR2024_ticks.log
-# log_date = datetime.now().strftime('%d%b%Y').upper()
 # IST is UTC+5:30
 ist = timezone(timedelta(hours=5, minutes=30))
 log_date = datetime.now(ist).strftime('%d%b%Y').upper()
@@ -291,7 +294,20 @@ class NiftyOptionStreamer:
     def on_ticks(self, ws, ticks):
         """Callback when ticks are received"""
         try:
-            local_time = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            # Check if market end time reached (using IST)
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
+            current_time_ist = datetime.now(ist_tz)
+
+            # Parse MARKET_END_TIME string to time object (e.g., "15:35" -> time(15, 35))
+            end_hour, end_minute = map(int, MARKET_END_TIME.split(':'))
+            market_end_time_obj = time(end_hour, end_minute)
+
+            if current_time_ist.time() >= market_end_time_obj:
+                logger.info(f"Market end time ({MARKET_END_TIME} IST) reached. Stopping streamer...")
+                self.stop()
+                sys.exit(0)
+
+            local_time = current_time_ist.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
             for tick in ticks:
                 token = tick['instrument_token']
@@ -347,7 +363,7 @@ class NiftyOptionStreamer:
                 f"Attempting reconnection {self.reconnect_attempts}/"
                 f"{self.MAX_RECONNECT_ATTEMPTS} in {self.RECONNECT_DELAY}s"
             )
-            time.sleep(self.RECONNECT_DELAY)
+            time_module.sleep(self.RECONNECT_DELAY)
             self.start()
         else:
             logger.error("Max reconnection attempts reached. Exiting.")
