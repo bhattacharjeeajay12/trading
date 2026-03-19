@@ -28,7 +28,7 @@ OPTION_DEPTH = 2
 OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 
 # Market end time (IST) - streamer will auto-stop at this time
-MARKET_END_TIME = "11:18"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
+MARKET_END_TIME = "11:21"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
 
 # ============================================================================
 
