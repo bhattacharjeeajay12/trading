@@ -5,6 +5,9 @@
 
 # Cron Job Setup Guide
 
+## ist-utc converter
+https://www.freeconvert.com/time/ist-to-utc
+
 ## Important: Cron uses UTC time, not IST!
 
 **Convert IST to UTC:** Subtract 5 hours 30 minutes

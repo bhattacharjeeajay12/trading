@@ -28,7 +28,7 @@ OPTION_DEPTH = 2
 OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 
 # Market end time (IST) - streamer will auto-stop at this time
-MARKET_END_TIME = "11:25"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
+MARKET_END_TIME = "15:31"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
 
 # ============================================================================
 
@@ -365,7 +365,9 @@ class NiftyOptionStreamer:
             logger.info("Market ended. Stopping reactor and exiting gracefully.")
             # Stop the Twisted reactor to unblock the main thread
             if reactor.running:
+                print("stopping reactor")
                 reactor.callFromThread(reactor.stop)
+                print("exiting gracefully")
             return
 
         # Attempt reconnection
