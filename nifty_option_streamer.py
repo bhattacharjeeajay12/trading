@@ -254,6 +254,66 @@ class NiftyOptionStreamer:
 
         return tokens
 
+    def get_symbol_from_token(self, token: int) -> str:
+        """Get trading symbol from token"""
+        if token == self.nifty_token:
+            return "NIFTY 50"
+
+        for strike, options in self.option_chain.items():
+            if options.get('CE_token') == token:
+                return options.get('CE_symbol', f'CE_{strike}')
+            if options.get('PE_token') == token:
+                return options.get('PE_symbol', f'PE_{strike}')
+
+        return f"UNKNOWN_{token}"
+
+    def get_position_label(self, token: int, atm_strike: int) -> str:
+        """
+        Get position label (ITM-2, ATM, OTM+1, etc.) for a token relative to ATM
+
+        Args:
+            token: Instrument token
+            atm_strike: ATM strike to calculate position against
+
+        Returns:
+            Position label string (e.g., "ITM-2", "ATM", "OTM+1")
+        """
+        if token == self.nifty_token:
+            return "INDEX"
+
+        # Find strike and option type for this token
+        for strike, options in self.option_chain.items():
+            ce_token = options.get('CE_token')
+            pe_token = options.get('PE_token')
+
+            if token == ce_token:
+                ce_pe = "CE"
+            elif token == pe_token:
+                ce_pe = "PE"
+            else:
+                continue
+
+            # Calculate position relative to ATM
+            strike_diff = (strike - atm_strike) // self.NIFTY_STRIKE_INTERVAL
+
+            if strike_diff == 0:
+                return "ATM"
+            elif strike_diff > 0:
+                # Above ATM
+                if ce_pe == "CE":
+                    return f"OTM+{strike_diff}"
+                else:  # PE
+                    return f"ITM+{strike_diff}"
+            else:  # strike_diff < 0
+                # Below ATM
+                abs_diff = abs(strike_diff)
+                if ce_pe == "CE":
+                    return f"ITM-{abs_diff}"
+                else:  # PE
+                    return f"OTM-{abs_diff}"
+
+        return "UNKNOWN"
+
     def update_subscriptions(self, new_atm_strike: int):
         """Update subscriptions based on new ATM strike"""
         new_tokens = self.get_tokens_to_subscribe(new_atm_strike)
@@ -267,10 +327,14 @@ class NiftyOptionStreamer:
                 self.kws.unsubscribe(list(tokens_to_unsubscribe))
                 logger.info(f"Unsubscribed from {len(tokens_to_unsubscribe)} tokens")
 
-                # Log details of unsubscribed tokens
+                # Log details of unsubscribed tokens with position (relative to NEW ATM), Nifty price and ATM
                 for token in tokens_to_unsubscribe:
                     symbol = self.get_symbol_from_token(token)
-                    logger.info(f"UNSUBSCRIBED: Token={token}, Symbol={symbol}")
+                    position = self.get_position_label(token, new_atm_strike)
+                    logger.info(
+                        f"UNSUBSCRIBED: Token={token}, Symbol={symbol}, Position={position}, "
+                        f"Nifty={self.current_nifty_price}, ATM={new_atm_strike}"
+                    )
 
             except Exception as e:
                 logger.error(f"Error unsubscribing: {e}")
@@ -281,10 +345,14 @@ class NiftyOptionStreamer:
                 self.kws.set_mode(self.kws.MODE_FULL, list(tokens_to_subscribe))
                 logger.info(f"Subscribed to {len(tokens_to_subscribe)} new tokens")
 
-                # Log details of newly subscribed tokens
+                # Log details of newly subscribed tokens with position, Nifty price and ATM
                 for token in tokens_to_subscribe:
                     symbol = self.get_symbol_from_token(token)
-                    logger.info(f"SUBSCRIBED: Token={token}, Symbol={symbol}")
+                    position = self.get_position_label(token, new_atm_strike)
+                    logger.info(
+                        f"SUBSCRIBED: Token={token}, Symbol={symbol}, Position={position}, "
+                        f"Nifty={self.current_nifty_price}, ATM={new_atm_strike}"
+                    )
 
             except Exception as e:
                 logger.error(f"Error subscribing: {e}")
@@ -296,19 +364,6 @@ class NiftyOptionStreamer:
             f"Subscription update complete. ATM Strike: {new_atm_strike}, "
             f"Total subscribed: {len(self.subscribed_tokens)}"
         )
-
-    def get_symbol_from_token(self, token: int) -> str:
-        """Get trading symbol from token"""
-        if token == self.nifty_token:
-            return "NIFTY 50"
-
-        for strike, options in self.option_chain.items():
-            if options.get('CE_token') == token:
-                return options.get('CE_symbol', f'CE_{strike}')
-            if options.get('PE_token') == token:
-                return options.get('PE_symbol', f'PE_{strike}')
-
-        return f"UNKNOWN_{token}"
 
     def get_option_metadata(self, token: int) -> Dict[str, str]:
         """
