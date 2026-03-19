@@ -171,37 +171,53 @@ class NiftyOptionStreamer:
             logger.info("Fetching instruments from Kite Connect...")
             instruments = self.kite.instruments("NFO")
 
-            nifty_options = [
-                inst for inst in instruments
-                if inst['name'] == 'NIFTY' and inst['instrument_type'] in ['CE', 'PE']
-            ]
+            logger.info(f"Filtering Nifty options from {len(instruments)} instruments...")
+
+            # Filter only Nifty options early to reduce memory
+            nifty_options = []
+            for inst in instruments:
+                if inst['name'] == 'NIFTY' and inst['instrument_type'] in ['CE', 'PE']:
+                    nifty_options.append(inst)
+
+            # Delete the full instruments list to free memory
+            del instruments
+
+            logger.info(f"Found {len(nifty_options)} Nifty options")
 
             # Filter by expiry if specified
             if self.expiry:
-                nifty_options = [
-                    opt for opt in nifty_options
-                    if opt['expiry'].strftime('%Y-%m-%d') == self.expiry
-                ]
+                filtered_options = []
+                for opt in nifty_options:
+                    if opt['expiry'].strftime('%Y-%m-%d') == self.expiry:
+                        filtered_options.append(opt)
+                nifty_options = filtered_options
+                del filtered_options
             else:
                 # Get nearest expiry
                 if nifty_options:
                     nearest_expiry = min(opt['expiry'] for opt in nifty_options)
-                    nifty_options = [
-                        opt for opt in nifty_options
-                        if opt['expiry'] == nearest_expiry
-                    ]
+                    filtered_options = []
+                    for opt in nifty_options:
+                        if opt['expiry'] == nearest_expiry:
+                            filtered_options.append(opt)
+                    nifty_options = filtered_options
+                    del filtered_options
                     self.expiry = nearest_expiry.strftime('%Y-%m-%d')
                     logger.info(f"Using nearest expiry: {self.expiry}")
 
-            # Build option chain dictionary
+            # Build option chain dictionary - only store essential data
             for opt in nifty_options:
                 strike = opt['strike']
                 if strike not in self.option_chain:
                     self.option_chain[strike] = {}
 
                 opt_type = opt['instrument_type']
+                # Only store token and symbol, not the entire instrument object
                 self.option_chain[strike][f'{opt_type}_token'] = opt['instrument_token']
                 self.option_chain[strike][f'{opt_type}_symbol'] = opt['tradingsymbol']
+
+            # Delete nifty_options to free memory
+            del nifty_options
 
             logger.info(f"Loaded option chain with {len(self.option_chain)} strikes for expiry {self.expiry}")
 
