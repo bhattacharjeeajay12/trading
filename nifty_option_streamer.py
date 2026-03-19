@@ -409,6 +409,9 @@ class NiftyOptionStreamer:
 
                 tick_serializable = convert_datetime(tick)
 
+                # Add local timestamp to tick data
+                tick_serializable['local_time'] = local_time
+
                 # Enrich tick with option metadata
                 metadata = self.get_option_metadata(token)
                 tick_serializable['symbol'] = metadata['symbol']
