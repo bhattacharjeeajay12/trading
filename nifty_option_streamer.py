@@ -319,16 +319,16 @@ class NiftyOptionStreamer:
                 elif strike_diff > 0:
                     # Above ATM
                     if ce_pe == "CE":
-                        option_type = f"otm_plus_{strike_diff}"
+                        option_type = f"otm_plus_{int(strike_diff)}"
                     else:  # PE
-                        option_type = f"itm_plus_{strike_diff}"
+                        option_type = f"itm_plus_{int(strike_diff)}"
                 else:  # strike_diff < 0
                     # Below ATM
                     abs_diff = abs(strike_diff)
                     if ce_pe == "CE":
-                        option_type = f"itm_minus_{abs_diff}"
+                        option_type = f"itm_minus_{int(abs_diff)}"
                     else:  # PE
-                        option_type = f"otm_minus_{abs_diff}"
+                        option_type = f"otm_minus_{int(abs_diff)}"
 
             return {
                 "symbol": symbol,
