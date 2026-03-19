@@ -279,6 +279,72 @@ class NiftyOptionStreamer:
 
         return f"UNKNOWN_{token}"
 
+    def get_option_metadata(self, token: int) -> Dict[str, str]:
+        """
+        Get option metadata including symbol, CE/PE type, and position relative to ATM
+
+        Returns:
+            Dict with keys: symbol, option_CE_PE, option_type, strike
+        """
+        # Default for non-option instruments (like Nifty index)
+        if token == self.nifty_token:
+            return {
+                "symbol": "NIFTY 50",
+                "option_CE_PE": None,
+                "option_type": "index",
+                "strike": None
+            }
+
+        # Find the option in the chain
+        for strike, options in self.option_chain.items():
+            ce_token = options.get('CE_token')
+            pe_token = options.get('PE_token')
+
+            if token == ce_token:
+                symbol = options.get('CE_symbol', f'CE_{strike}')
+                ce_pe = "CE"
+            elif token == pe_token:
+                symbol = options.get('PE_symbol', f'PE_{strike}')
+                ce_pe = "PE"
+            else:
+                continue
+
+            # Calculate option type relative to ATM
+            option_type = "unknown"
+            if self.current_atm_strike is not None:
+                strike_diff = (strike - self.current_atm_strike) // self.NIFTY_STRIKE_INTERVAL
+
+                if strike_diff == 0:
+                    option_type = "atm"
+                elif strike_diff > 0:
+                    # Above ATM
+                    if ce_pe == "CE":
+                        option_type = f"otm_plus_{strike_diff}"
+                    else:  # PE
+                        option_type = f"itm_plus_{strike_diff}"
+                else:  # strike_diff < 0
+                    # Below ATM
+                    abs_diff = abs(strike_diff)
+                    if ce_pe == "CE":
+                        option_type = f"itm_minus_{abs_diff}"
+                    else:  # PE
+                        option_type = f"otm_minus_{abs_diff}"
+
+            return {
+                "symbol": symbol,
+                "option_CE_PE": ce_pe,
+                "option_type": option_type,
+                "strike": strike
+            }
+
+        # Token not found in option chain
+        return {
+            "symbol": f"UNKNOWN_{token}",
+            "option_CE_PE": None,
+            "option_type": "unknown",
+            "strike": None
+        }
+
     def on_connect(self, ws, response):
         """Callback when WebSocket connects"""
         logger.info(f"WebSocket connected: {response}")
@@ -328,6 +394,13 @@ class NiftyOptionStreamer:
 
                 tick_serializable = convert_datetime(tick)
 
+                # Enrich tick with option metadata
+                metadata = self.get_option_metadata(token)
+                tick_serializable['symbol'] = metadata['symbol']
+                tick_serializable['option_CE_PE'] = metadata['option_CE_PE']
+                tick_serializable['option_type'] = metadata['option_type']
+                tick_serializable['strike'] = metadata['strike']
+
                 # Log every tick with prefix for easy parsing
                 logger.info(f"tick_data: {local_time} | {json.dumps(tick_serializable)}")
 
@@ -365,9 +438,7 @@ class NiftyOptionStreamer:
             logger.info("Market ended. Stopping reactor and exiting gracefully.")
             # Stop the Twisted reactor to unblock the main thread
             if reactor.running:
-                print("stopping reactor")
                 reactor.callFromThread(reactor.stop)
-                print("exiting gracefully")
             return
 
         # Attempt reconnection
