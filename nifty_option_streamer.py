@@ -26,7 +26,7 @@ OPTION_DEPTH = 2
 OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 
 # Market end time (IST) - streamer will auto-stop at this time
-MARKET_END_TIME = "10:25"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
+MARKET_END_TIME = "10:39"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
 
 # ============================================================================
 
@@ -113,6 +113,7 @@ class NiftyOptionStreamer:
         self.kws = None
         self.kite = None
         self.reconnect_attempts = 0
+        self.market_ended = False  # Flag to prevent reconnection after market end
 
         logger.info(f"Initialized NiftyOptionStreamer with depth={depth}, expiry={expiry}")
 
@@ -304,8 +305,9 @@ class NiftyOptionStreamer:
 
             if current_time_ist.time() >= market_end_time_obj:
                 logger.info(f"Market end time ({MARKET_END_TIME} IST) reached. Stopping streamer...")
+                self.market_ended = True
                 self.stop()
-                sys.exit(0)
+                return  # Exit the callback cleanly
 
             local_time = current_time_ist.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
@@ -355,6 +357,11 @@ class NiftyOptionStreamer:
     def on_close(self, ws, code, reason):
         """Callback when WebSocket closes"""
         logger.warning(f"WebSocket closed - Code: {code}, Reason: {reason}")
+
+        # Don't reconnect if market has ended
+        if self.market_ended:
+            logger.info("Market ended. Exiting gracefully.")
+            sys.exit(0)
 
         # Attempt reconnection
         if self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
