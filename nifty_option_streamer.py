@@ -1,6 +1,6 @@
 import json
 import logging
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 import os
 import sys
 from dotenv import load_dotenv
@@ -62,12 +62,13 @@ log_filename = os.path.join(log_dir, f"{log_date}_ticks.log")
 # Create directory structure if it doesn't exist
 os.makedirs(log_dir, exist_ok=True)
 
-# Rotating file handler (10MB per file, keep 5 backups)
-# When file reaches 10MB, it becomes 19MAR2024_ticks.log.1, then .2, etc.
-file_handler = RotatingFileHandler(
+# Hourly rotating file handler
+# Creates new file every hour: 20MAR2026_09.log, 20MAR2026_10.log, etc.
+file_handler = TimedRotatingFileHandler(
     log_filename,
-    maxBytes=10 * 1024 * 1024,  # 10MB
-    backupCount=5
+    when='H',        # Rotate every Hour
+    interval=1,      # Every 1 hour
+    backupCount=24   # Keep 24 hours worth (covers full day + extra)
 )
 file_handler.setFormatter(
     ISTFormatter("%(asctime)s - %(levelname)s - %(message)s")
