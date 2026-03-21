@@ -1,0 +1,6 @@
+load_dotenv
+selenium
+webdriver-manager
+kiteconnect
+pyotp
+pandas

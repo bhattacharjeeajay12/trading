@@ -1,0 +1,7 @@
+[
+  {
+    "trade_type": "INDEX_OPTIONS",
+    "exchange": "NSE",
+    "instrument_list": ["NIFTY 50"]
+  }
+]

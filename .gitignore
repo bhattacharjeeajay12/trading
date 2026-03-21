@@ -1,4 +1,15 @@
 .venv
 .env
-.idea
-secrets
+secrets/
+dev/
+# Ignore everything inside assets
+assets/*
+
+# But keep the folder itself
+!assets/
+!assets/.gitkeep
+!assets/loginInfo
+!assets/loginInfo/.gitkeep
+!assets/logs
+!assets/logs/.gitkeep
+
