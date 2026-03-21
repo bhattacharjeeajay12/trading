@@ -1,6 +1,6 @@
 import json
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 from dotenv import load_dotenv
@@ -28,7 +28,7 @@ OPTION_DEPTH = 2
 OPTION_EXPIRY = None  # Example: "2024-03-28" or None
 
 # Market end time (IST) - streamer will auto-stop at this time
-MARKET_END_TIME = "15:31"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close),
+MARKET_END_TIME = "15:31"  # Format: HH:MM e.g. 15:35; 3:35 PM IST (5 minutes after market close)
 
 # ============================================================================
 
@@ -62,13 +62,12 @@ log_filename = os.path.join(log_dir, f"{log_date}_ticks.log")
 # Create directory structure if it doesn't exist
 os.makedirs(log_dir, exist_ok=True)
 
-# Hourly rotating file handler
-# Creates new file every hour: 20MAR2026_09.log, 20MAR2026_10.log, etc.
-file_handler = TimedRotatingFileHandler(
+# Size-based rotating file handler
+# Rotates when file reaches 50 MB
+file_handler = RotatingFileHandler(
     log_filename,
-    when='H',        # Rotate every Hour
-    interval=1,      # Every 1 hour
-    backupCount=24   # Keep 24 hours worth (covers full day + extra)
+    maxBytes=50 * 1024 * 1024,  # 50 MB per file
+    backupCount=50               # Keep 50 backup files (2.5 GB total capacity)
 )
 file_handler.setFormatter(
     ISTFormatter("%(asctime)s - %(levelname)s - %(message)s")
