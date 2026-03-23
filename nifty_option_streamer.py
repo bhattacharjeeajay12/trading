@@ -21,7 +21,7 @@ NIFTY_INDEX_TOKEN = 256265
 
 # Number of ITM and OTM strikes to subscribe on each side of ATM
 # Example: depth=5 means ATM ± 5 strikes (11 strikes total, 22 options + 1 index)
-OPTION_DEPTH = 2
+OPTION_DEPTH = 3
 
 # Option expiry date in YYYY-MM-DD format
 # Set to None to automatically use the nearest expiry

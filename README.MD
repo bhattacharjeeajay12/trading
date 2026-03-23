@@ -1,8 +1,3 @@
-
-# This is Prod branch for Production. 
-
-
-
 # Cron Job Setup Guide
 
 ## ist-utc converter
