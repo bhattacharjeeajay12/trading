@@ -283,6 +283,30 @@ class NiftyOptionStreamer:
 
         return f"UNKNOWN_{token}"
 
+    def build_window_snapshot(self, atm_strike: int):
+        snapshot = {
+            "time": datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+            "nifty": self.current_nifty_price,
+            "atm": atm_strike
+        }
+
+        for i in range(-self.depth, self.depth + 1):
+            strike = atm_strike + (i * self.NIFTY_STRIKE_INTERVAL)
+
+            label = "ATM" if i == 0 else f"ATM{('+' if i > 0 else '')}{i}"
+
+            if strike in self.option_chain:
+                ce = self.option_chain[strike].get("CE_symbol")
+                pe = self.option_chain[strike].get("PE_symbol")
+
+                snapshot[f"{label}_CE"] = ce
+                snapshot[f"{label}_PE"] = pe
+            else:
+                snapshot[f"{label}_CE"] = None
+                snapshot[f"{label}_PE"] = None
+
+        return snapshot
+
     def get_position_label(self, token: int, atm_strike: int) -> str:
         """
         Get position label (ITM-2, ATM, OTM+1, etc.) for a token relative to ATM
@@ -460,15 +484,18 @@ class NiftyOptionStreamer:
                         new_atm = self.calculate_atm_strike(ltp)
 
                         if self.current_atm_strike is None:
-                            logger.info(
-                                f"Nifty LTP: {ltp}, Initial ATM Strike: {new_atm}"
-                            )
+                            logger.info(f"Nifty LTP: {ltp}, Initial ATM Strike: {new_atm}")
                             self.update_subscriptions(new_atm)
 
+                            snapshot = self.build_window_snapshot(new_atm)
+                            logger.info(f"WINDOW_SNAPSHOT: {json.dumps(snapshot)}")
 
                         elif abs(new_atm - self.current_atm_strike) >= self.RESUBSCRIBE_THRESHOLD:
                             logger.info(f"ATM change: {self.current_atm_strike} -> {new_atm}")
                             self.update_subscriptions(new_atm)
+
+                            snapshot = self.build_window_snapshot(new_atm)
+                            logger.info(f"WINDOW_SNAPSHOT: {json.dumps(snapshot)}")
 
             # Freeze ATM AFTER update
             atm_for_this_batch = self.current_atm_strike
