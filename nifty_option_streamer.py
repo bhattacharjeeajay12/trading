@@ -315,9 +315,9 @@ class NiftyOptionStreamer:
             if strike_diff == 0:
                 return "ATM"
             elif strike_diff > 0:
-                return f"ATM+{strike_diff}"
+                return f"ATM+{int(strike_diff)}"
             else:
-                return f"ATM-{abs(strike_diff)}"
+                return f"ATM-{int(abs(strike_diff))}"
 
         return "UNKNOWN"
 
@@ -414,7 +414,7 @@ class NiftyOptionStreamer:
                 elif strike_diff > 0:
                     option_type = f"atm_plus_{strike_diff}"
                 else:
-                    option_type = f"atm_minus_{abs(strike_diff)}"
+                    option_type = f"atm_minus_{int(abs(strike_diff))}"
             else:
                 option_type = "unknown"
 
