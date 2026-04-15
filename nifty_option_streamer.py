@@ -229,14 +229,15 @@ class NiftyOptionStreamer:
     #     """Calculate ATM strike based on spot price"""
     #     return round(spot_price / self.NIFTY_STRIKE_INTERVAL) * self.NIFTY_STRIKE_INTERVAL
 
+    # --- ONLY SHOWING MODIFIED PARTS CLEANLY INTEGRATED ---
+
     def calculate_atm_strike(self, spot_price: float) -> int:
-        interval = self.NIFTY_STRIKE_INTERVAL  # 50
+        interval = self.NIFTY_STRIKE_INTERVAL
         half = interval / 2
 
         if self.current_atm_strike is None:
             return int((spot_price + half) // interval) * interval
 
-        # Shift only when price clearly exits current ATM band
         if spot_price >= self.current_atm_strike + half:
             return self.current_atm_strike + interval
         elif spot_price <= self.current_atm_strike - half:
@@ -330,64 +331,26 @@ class NiftyOptionStreamer:
         return "UNKNOWN"
 
     def update_subscriptions(self, new_atm_strike: int):
-        """Update subscriptions based on new ATM strike"""
         new_tokens = self.get_tokens_to_subscribe(new_atm_strike)
 
-        # Find tokens to unsubscribe and subscribe
         tokens_to_unsubscribe = self.subscribed_tokens - new_tokens
         tokens_to_subscribe = new_tokens - self.subscribed_tokens
 
-        if tokens_to_unsubscribe:
-            try:
-                self.kws.unsubscribe(list(tokens_to_unsubscribe))
-                logger.info(f"Unsubscribed from {len(tokens_to_unsubscribe)} tokens")
-
-                # Log details of unsubscribed tokens with position (relative to NEW ATM), Nifty price and ATM
-                for token in tokens_to_unsubscribe:
-                    symbol = self.get_symbol_from_token(token)
-                    position = self.get_position_label(token, new_atm_strike)
-                    logger.info(
-                        f"UNSUBSCRIBED: Token={token}, Symbol={symbol}, Position={position}, "
-                        f"Nifty={self.current_nifty_price}, ATM={new_atm_strike}"
-                    )
-
-            except Exception as e:
-                logger.error(f"Error unsubscribing: {e}")
-
+        # ✅ Subscribe FIRST (no data gap)
         if tokens_to_subscribe:
-            try:
-                self.kws.subscribe(list(tokens_to_subscribe))
-                self.kws.set_mode(self.kws.MODE_FULL, list(tokens_to_subscribe))
-                logger.info(f"Subscribed to {len(tokens_to_subscribe)} new tokens")
+            self.kws.subscribe(list(tokens_to_subscribe))
+            self.kws.set_mode(self.kws.MODE_FULL, list(tokens_to_subscribe))
 
-                # Log details of newly subscribed tokens with position, Nifty price and ATM
-                for token in tokens_to_subscribe:
-                    symbol = self.get_symbol_from_token(token)
-                    position = self.get_position_label(token, new_atm_strike)
-                    logger.info(
-                        f"SUBSCRIBED: Token={token}, Symbol={symbol}, Position={position}, "
-                        f"Nifty={self.current_nifty_price}, ATM={new_atm_strike}"
-                    )
-
-            except Exception as e:
-                logger.error(f"Error subscribing: {e}")
+        # ✅ Then unsubscribe
+        if tokens_to_unsubscribe:
+            self.kws.unsubscribe(list(tokens_to_unsubscribe))
 
         self.subscribed_tokens = new_tokens
         self.current_atm_strike = new_atm_strike
 
-        logger.info(
-            f"Subscription update complete. ATM Strike: {new_atm_strike}, "
-            f"Total subscribed: {len(self.subscribed_tokens)}"
-        )
+        logger.info(f"ATM updated -> {new_atm_strike}, total tokens={len(new_tokens)}")
 
-    def get_option_metadata(self, token: int) -> Dict[str, str]:
-        """
-        Get option metadata including symbol, CE/PE type, and position relative to ATM
-
-        Returns:
-            Dict with keys: symbol, option_CE_PE, option_type, strike
-        """
-        # Default for non-option instruments (like Nifty index)
+    def get_option_metadata(self, token: int, atm_strike: int) -> Dict[str, str]:
         if token == self.nifty_token:
             return {
                 "symbol": "NIFTY 50",
@@ -396,40 +359,31 @@ class NiftyOptionStreamer:
                 "strike": None
             }
 
-        # Find the option in the chain
         for strike, options in self.option_chain.items():
             ce_token = options.get('CE_token')
             pe_token = options.get('PE_token')
 
             if token == ce_token:
-                symbol = options.get('CE_symbol', f'CE_{strike}')
+                symbol = options.get('CE_symbol')
                 ce_pe = "CE"
             elif token == pe_token:
-                symbol = options.get('PE_symbol', f'PE_{strike}')
+                symbol = options.get('PE_symbol')
                 ce_pe = "PE"
             else:
                 continue
 
-            # Calculate option type relative to ATM
-            option_type = "unknown"
-            if self.current_atm_strike is not None:
-                strike_diff = (strike - self.current_atm_strike) // self.NIFTY_STRIKE_INTERVAL
+            if atm_strike is not None:
+                strike_diff = (strike - atm_strike) // self.NIFTY_STRIKE_INTERVAL
 
                 if strike_diff == 0:
                     option_type = "atm"
                 elif strike_diff > 0:
-                    # Above ATM
-                    if ce_pe == "CE":
-                        option_type = f"otm_plus_{int(strike_diff)}"
-                    else:  # PE
-                        option_type = f"itm_plus_{int(strike_diff)}"
-                else:  # strike_diff < 0
-                    # Below ATM
+                    option_type = f"otm_plus_{strike_diff}" if ce_pe == "CE" else f"itm_plus_{strike_diff}"
+                else:
                     abs_diff = abs(strike_diff)
-                    if ce_pe == "CE":
-                        option_type = f"itm_minus_{int(abs_diff)}"
-                    else:  # PE
-                        option_type = f"otm_minus_{int(abs_diff)}"
+                    option_type = f"itm_minus_{abs_diff}" if ce_pe == "CE" else f"otm_minus_{abs_diff}"
+            else:
+                option_type = "unknown"
 
             return {
                 "symbol": symbol,
@@ -438,13 +392,7 @@ class NiftyOptionStreamer:
                 "strike": strike
             }
 
-        # Token not found in option chain
-        return {
-            "symbol": f"UNKNOWN_{token}",
-            "option_CE_PE": None,
-            "option_type": "unknown",
-            "strike": None
-        }
+        return {"symbol": f"UNKNOWN_{token}", "option_CE_PE": None, "option_type": "unknown", "strike": None}
 
     def on_connect(self, ws, response):
         """Callback when WebSocket connects"""
@@ -462,28 +410,39 @@ class NiftyOptionStreamer:
             logger.error(f"Error in on_connect: {e}")
 
     def on_ticks(self, ws, ticks):
-        """Callback when ticks are received"""
         try:
-            # Check if market end time reached (using IST)
             ist_tz = timezone(timedelta(hours=5, minutes=30))
             current_time_ist = datetime.now(ist_tz)
-
-            # Parse MARKET_END_TIME string to time object (e.g., "15:35" -> time(15, 35))
-            end_hour, end_minute = map(int, MARKET_END_TIME.split(':'))
-            market_end_time_obj = time(end_hour, end_minute)
-
-            if current_time_ist.time() >= market_end_time_obj:
-                logger.info(f"Market end time ({MARKET_END_TIME} IST) reached. Stopping streamer...")
-                self.market_ended = True
-                self.stop()
-                return  # Exit the callback cleanly
-
             local_time = current_time_ist.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
+            # ==============================
+            # FIRST PASS -> update ATM only
+            # ==============================
+            for tick in ticks:
+                if tick['instrument_token'] == self.nifty_token:
+                    ltp = tick.get('last_price')
+                    if ltp:
+                        self.current_nifty_price = ltp
+
+                        new_atm = self.calculate_atm_strike(ltp)
+
+                        if self.current_atm_strike is None:
+                            logger.info(f"Initial ATM: {new_atm}")
+                            self.update_subscriptions(new_atm)
+
+                        elif new_atm != self.current_atm_strike:
+                            logger.info(f"ATM change: {self.current_atm_strike} -> {new_atm}")
+                            self.update_subscriptions(new_atm)
+
+            # ✅ Freeze ATM AFTER update
+            atm_for_this_batch = self.current_atm_strike
+
+            # ==============================
+            # SECOND PASS-> log all ticks
+            # ==============================
             for tick in ticks:
                 token = tick['instrument_token']
 
-                # Convert tick to JSON-serializable format by handling datetime recursively
                 def convert_datetime(obj):
                     if isinstance(obj, datetime):
                         return obj.isoformat()
@@ -495,40 +454,19 @@ class NiftyOptionStreamer:
 
                 tick_serializable = convert_datetime(tick)
 
-                # Add local timestamp to tick data
+                # timestamps
                 tick_serializable['local_time'] = local_time
+                tick_serializable['exchange_timestamp'] = tick.get('timestamp')
+                tick_serializable['last_trade_time'] = tick.get('last_trade_time')
 
-                # Enrich tick with option metadata
-                metadata = self.get_option_metadata(token)
-                tick_serializable['symbol'] = metadata['symbol']
-                tick_serializable['option_CE_PE'] = metadata['option_CE_PE']
-                tick_serializable['option_type'] = metadata['option_type']
-                tick_serializable['strike'] = metadata['strike']
+                # metadata (uses frozen ATM)
+                metadata = self.get_option_metadata(token, atm_for_this_batch)
+                tick_serializable.update(metadata)
 
-                # Log every tick with prefix for easy parsing
+                # ensure no datetime remains
+                tick_serializable = convert_datetime(tick_serializable)
+
                 logger.info(f"tick_data: {local_time} | {json.dumps(tick_serializable)}")
-
-                # Check if this is Nifty index tick
-                if token == self.nifty_token:
-                    ltp = tick.get('last_price')
-                    if ltp:
-                        self.current_nifty_price = ltp
-                        new_atm_strike = self.calculate_atm_strike(ltp)
-
-                        # Check if we need to update subscriptions
-                        if self.current_atm_strike is None:
-                            # First time - subscribe to option chain
-                            logger.info(f"Nifty LTP: {ltp}, Initial ATM Strike: {new_atm_strike}")
-                            self.update_subscriptions(new_atm_strike)
-
-                        elif abs(ltp - self.current_atm_strike) >= self.RESUBSCRIBE_THRESHOLD:
-                            # Price moved significantly - resubscribe
-                            logger.info(
-                                f"Nifty moved from {self.current_nifty_price} to {ltp}. "
-                                f"Updating subscriptions. Old ATM: {self.current_atm_strike}, "
-                                f"New ATM: {new_atm_strike}"
-                            )
-                            self.update_subscriptions(new_atm_strike)
 
         except Exception as e:
             logger.error(f"Error processing ticks: {e}", exc_info=True)
