@@ -336,12 +336,12 @@ class NiftyOptionStreamer:
         tokens_to_unsubscribe = self.subscribed_tokens - new_tokens
         tokens_to_subscribe = new_tokens - self.subscribed_tokens
 
-        # ✅ Subscribe FIRST (no data gap)
+        # Subscribe FIRST (no data gap)
         if tokens_to_subscribe:
             self.kws.subscribe(list(tokens_to_subscribe))
             self.kws.set_mode(self.kws.MODE_FULL, list(tokens_to_subscribe))
 
-        # ✅ Then unsubscribe
+        # Then unsubscribe
         if tokens_to_unsubscribe:
             self.kws.unsubscribe(list(tokens_to_unsubscribe))
 
@@ -434,7 +434,7 @@ class NiftyOptionStreamer:
                             logger.info(f"ATM change: {self.current_atm_strike} -> {new_atm}")
                             self.update_subscriptions(new_atm)
 
-            # ✅ Freeze ATM AFTER update
+            # Freeze ATM AFTER update
             atm_for_this_batch = self.current_atm_strike
 
             # ==============================
