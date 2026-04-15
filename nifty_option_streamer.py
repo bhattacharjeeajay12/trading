@@ -315,18 +315,9 @@ class NiftyOptionStreamer:
             if strike_diff == 0:
                 return "ATM"
             elif strike_diff > 0:
-                # Above ATM
-                if ce_pe == "CE":
-                    return f"OTM+{strike_diff}"
-                else:  # PE
-                    return f"ITM+{strike_diff}"
-            else:  # strike_diff < 0
-                # Below ATM
-                abs_diff = abs(strike_diff)
-                if ce_pe == "CE":
-                    return f"ITM-{abs_diff}"
-                else:  # PE
-                    return f"OTM-{abs_diff}"
+                return f"ATM+{strike_diff}"
+            else:
+                return f"ATM-{abs(strike_diff)}"
 
         return "UNKNOWN"
 
@@ -421,10 +412,9 @@ class NiftyOptionStreamer:
                 if strike_diff == 0:
                     option_type = "atm"
                 elif strike_diff > 0:
-                    option_type = f"otm_plus_{strike_diff}" if ce_pe == "CE" else f"itm_plus_{strike_diff}"
+                    option_type = f"atm_plus_{strike_diff}"
                 else:
-                    abs_diff = abs(strike_diff)
-                    option_type = f"itm_minus_{abs_diff}" if ce_pe == "CE" else f"otm_minus_{abs_diff}"
+                    option_type = f"atm_minus_{abs(strike_diff)}"
             else:
                 option_type = "unknown"
 
