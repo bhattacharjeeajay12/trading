@@ -331,24 +331,67 @@ class NiftyOptionStreamer:
         return "UNKNOWN"
 
     def update_subscriptions(self, new_atm_strike: int):
+        old_atm = self.current_atm_strike
+        nifty_price = self.current_nifty_price
+
         new_tokens = self.get_tokens_to_subscribe(new_atm_strike)
 
         tokens_to_unsubscribe = self.subscribed_tokens - new_tokens
         tokens_to_subscribe = new_tokens - self.subscribed_tokens
 
-        # Subscribe FIRST (no data gap)
+        # -------------------------------
+        # LOG ATM movement (like original)
+        # -------------------------------
+        if old_atm is not None:
+            logger.info(
+                f"Nifty moved. Updating subscriptions. "
+                f"Nifty={nifty_price}, Old ATM: {old_atm}, New ATM: {new_atm_strike}"
+            )
+
+        # -------------------------------
+        # UNSUBSCRIBE (log first)
+        # -------------------------------
+        if tokens_to_unsubscribe:
+            self.kws.unsubscribe(list(tokens_to_unsubscribe))
+            logger.info(f"Unsubscribed from {len(tokens_to_unsubscribe)} tokens")
+
+            for token in tokens_to_unsubscribe:
+                symbol = self.get_symbol_from_token(token)
+                position = self.get_position_label(token, new_atm_strike)
+
+                logger.info(
+                    f"UNSUBSCRIBED: Token={token}, Symbol={symbol}, "
+                    f"Position={position}, Nifty={nifty_price}, ATM={new_atm_strike}"
+                )
+
+        # -------------------------------
+        # SUBSCRIBE
+        # -------------------------------
         if tokens_to_subscribe:
             self.kws.subscribe(list(tokens_to_subscribe))
             self.kws.set_mode(self.kws.MODE_FULL, list(tokens_to_subscribe))
 
-        # Then unsubscribe
-        if tokens_to_unsubscribe:
-            self.kws.unsubscribe(list(tokens_to_unsubscribe))
+            logger.info(f"Subscribed to {len(tokens_to_subscribe)} new tokens")
 
+            for token in tokens_to_subscribe:
+                symbol = self.get_symbol_from_token(token)
+                position = self.get_position_label(token, new_atm_strike)
+
+                logger.info(
+                    f"SUBSCRIBED: Token={token}, Symbol={symbol}, "
+                    f"Position={position}, Nifty={nifty_price}, ATM={new_atm_strike}"
+                )
+
+        # -------------------------------
+        # FINAL STATE UPDATE
+        # -------------------------------
         self.subscribed_tokens = new_tokens
         self.current_atm_strike = new_atm_strike
 
-        logger.info(f"ATM updated -> {new_atm_strike}, total tokens={len(new_tokens)}")
+        logger.info(
+            f"Subscription update complete. ATM Strike: {new_atm_strike}, "
+            f"Total subscribed: {len(new_tokens)}"
+        )
 
     def get_option_metadata(self, token: int, atm_strike: int) -> Dict[str, str]:
         if token == self.nifty_token:
@@ -427,10 +470,13 @@ class NiftyOptionStreamer:
                         new_atm = self.calculate_atm_strike(ltp)
 
                         if self.current_atm_strike is None:
-                            logger.info(f"Initial ATM: {new_atm}")
+                            logger.info(
+                                f"Nifty LTP: {ltp}, Initial ATM Strike: {new_atm}"
+                            )
                             self.update_subscriptions(new_atm)
 
-                        elif new_atm != self.current_atm_strike:
+
+                        elif abs(new_atm - self.current_atm_strike) >= self.RESUBSCRIBE_THRESHOLD:
                             logger.info(f"ATM change: {self.current_atm_strike} -> {new_atm}")
                             self.update_subscriptions(new_atm)
 
