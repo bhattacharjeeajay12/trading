@@ -225,9 +225,24 @@ class NiftyOptionStreamer:
             logger.error(f"Error loading option chain: {e}", exc_info=True)
             raise
 
+    # def calculate_atm_strike(self, spot_price: float) -> int:
+    #     """Calculate ATM strike based on spot price"""
+    #     return round(spot_price / self.NIFTY_STRIKE_INTERVAL) * self.NIFTY_STRIKE_INTERVAL
+
     def calculate_atm_strike(self, spot_price: float) -> int:
-        """Calculate ATM strike based on spot price"""
-        return round(spot_price / self.NIFTY_STRIKE_INTERVAL) * self.NIFTY_STRIKE_INTERVAL
+        interval = self.NIFTY_STRIKE_INTERVAL  # 50
+        half = interval / 2
+
+        if self.current_atm_strike is None:
+            return int((spot_price + half) // interval) * interval
+
+        # Shift only when price clearly exits current ATM band
+        if spot_price >= self.current_atm_strike + half:
+            return self.current_atm_strike + interval
+        elif spot_price <= self.current_atm_strike - half:
+            return self.current_atm_strike - interval
+
+        return self.current_atm_strike
 
     def get_tokens_to_subscribe(self, atm_strike: int) -> Set[int]:
         """
