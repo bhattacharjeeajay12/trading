@@ -124,29 +124,57 @@ class NiftyOptionStreamer:
         with open(os.path.join("assets", "loginInfo", "access_token.txt"), "r") as f:
             return f.read().strip()
 
+    def get_nearest_expiry(self, instruments):
+        expiries = sorted({
+            inst['expiry']
+            for inst in instruments
+            if inst['name'] == 'NIFTY' and inst['instrument_type'] in ['CE', 'PE']
+        })
+        return expiries[0]  # nearest expiry (weekly in most cases)
+
     def load_option_chain(self):
         instruments = self.kite.instruments("NFO")
 
+        # ✅ Step 1: Auto-select nearest expiry
+        if not self.expiry:
+            expiries = sorted({
+                inst['expiry']
+                for inst in instruments
+                if inst['name'] == 'NIFTY' and inst['instrument_type'] in ['CE', 'PE']
+            })
+            self.expiry = expiries[0]
+            logger.info(f"Auto-selected expiry: {self.expiry}")
+
+        # ✅ Step 2: Build option chain ONLY for selected expiry
         for inst in instruments:
-            if inst['name'] == 'NIFTY' and inst['instrument_type'] in ['CE', 'PE']:
-                strike = inst['strike']
+            if inst['name'] != 'NIFTY':
+                continue
 
-                if strike not in self.option_chain:
-                    self.option_chain[strike] = {}
+            if inst['instrument_type'] not in ['CE', 'PE']:
+                continue
 
-                opt_type = inst['instrument_type']
-                token = inst['instrument_token']
-                symbol = inst['tradingsymbol']
+            # 🔥 CRITICAL FIX: filter by expiry
+            if inst['expiry'] != self.expiry:
+                continue
 
-                self.option_chain[strike][f'{opt_type}_token'] = token
-                self.option_chain[strike][f'{opt_type}_symbol'] = symbol
+            strike = inst['strike']
 
-                # reverse map
-                self.token_map[token] = {
-                    "strike": strike,
-                    "type": opt_type,
-                    "symbol": symbol
-                }
+            if strike not in self.option_chain:
+                self.option_chain[strike] = {}
+
+            opt_type = inst['instrument_type']
+            token = inst['instrument_token']
+            symbol = inst['tradingsymbol']
+
+            self.option_chain[strike][f'{opt_type}_token'] = token
+            self.option_chain[strike][f'{opt_type}_symbol'] = symbol
+
+            # reverse map
+            self.token_map[token] = {
+                "strike": strike,
+                "type": opt_type,
+                "symbol": symbol
+            }
 
     # FIX: correct rounding
     def calculate_atm_strike(self, spot_price: float) -> int:
