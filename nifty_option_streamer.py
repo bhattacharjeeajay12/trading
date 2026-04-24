@@ -20,7 +20,6 @@ NIFTY_INDEX_TOKEN = 256265
 OPTION_DEPTH = 3
 OPTION_EXPIRY = None
 MARKET_END_TIME = "15:31"
-
 # ============================================================================
 
 logger = logging.getLogger(__name__)
