@@ -118,7 +118,7 @@ def apply_trailing_logic(df, params):
 
     return trades
 
-def resample_fractional_minute(df, time_col, n=4):
+def resample_fractional_minute(df, time_col, n=4, depth=True):
     df = df.copy()
     df[time_col] = pd.to_datetime(df[time_col])
     df = df.sort_values(time_col)
@@ -128,12 +128,24 @@ def resample_fractional_minute(df, time_col, n=4):
     # -----------------------------
     df["minute"] = df[time_col].dt.floor("min")
 
-    minute_ohlc = df.groupby("minute")["last_price"].agg(
-        minute_open="first",
-        minute_high="max",
-        minute_low="min",
-        minute_close="last"
-    ).reset_index()
+    # minute_ohlc = df.groupby("minute")["last_price"].agg(
+    #     minute_open="first",
+    #     minute_high="max",
+    #     minute_low="min",
+    #     minute_close="last"
+    # ).reset_index()
+    minute_ohlc = (
+        df.groupby("minute")
+        .agg(
+            minute_open=("last_price", "first"),
+            minute_high=("last_price", "max"),
+            minute_low=("last_price", "min"),
+            minute_close=("last_price", "last"),
+            depth_list=("depth", list),
+            ltp_list = ("last_price", list)
+        )
+        .reset_index()
+    )
 
     # Candle type
     minute_ohlc["candle_type"] = np.where(
@@ -174,7 +186,7 @@ def resample_fractional_minute(df, time_col, n=4):
     # -----------------------------
     # Step 4: Attach candle type
     # -----------------------------
-    out = out.merge(minute_ohlc[["minute", "candle_type", "minute_open", "minute_high", "minute_low", "minute_close"]],
+    out = out.merge(minute_ohlc[["minute", "candle_type", "minute_open", "minute_high", "minute_low", "minute_close", "depth_list", "ltp_list"]],
                     on="minute",
                     how="left")
     return out
@@ -225,7 +237,7 @@ def generate_signal(
     price_pct_threshold = 0.001,
     volume_threshold = 0,
 
-    use_price_pct_level=False,
+    use_price_pct_level=True,
     use_price_trend=True,
     use_volume=False
 ):
@@ -266,10 +278,12 @@ def generate_signal(
     # VOLUME CONDITION
     # ---------------------------
     if use_volume:
-        print("use_volume : ", use_volume)
-        vol_diff = df["volume_participated"].diff()
-        # cond_vol = (df["volume_diff"] > volume_threshold)
-        cond_vol = vol_diff >= 0
+        # print("use_volume : ", use_volume)
+        # vol_diff = df["volume_participated"].diff()
+        # cond_vol = vol_diff >= 0
+        # vol_streak = cond_vol.rolling(window).min() == 1
+
+        cond_vol = df["volume_close"] > (df["volume_avg"] * 1.2)
         vol_streak = cond_vol.rolling(window).min() == 1
     else:
         vol_streak = pd.Series(True, index=df.index)
