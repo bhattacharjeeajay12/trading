@@ -153,16 +153,22 @@ def resample_fractional_minute(df, time_col, n=4):
     df["bucket_time"] = df["minute"] + pd.to_timedelta(
         df["bucket"] * bucket_size, unit="s"
     )
-    # df["bucket_time_next"] = df["bucket_time"].shift(-1)
 
     # -----------------------------
     # Step 3: OHLC per bucket
     # -----------------------------
-    out = df.groupby(["bucket_time", "minute"])["last_price"].agg(
-        open="first",
-        high="max",
-        low="min",
-        close="last"
+    out = df.groupby(["bucket_time", "minute"]).agg(
+        # Price aggregations
+        open=("last_price", "first"),
+        high=("last_price", "max"),
+        low=("last_price", "min"),
+        close=("last_price", "last"),
+
+        # Volume aggregations
+        volume_open=("volume_at_tick", "first"),
+        volume_high=("volume_at_tick", "max"),
+        volume_low=("volume_at_tick", "min"),
+        volume_close=("volume_at_tick", "last")
     ).reset_index()
 
     # -----------------------------
@@ -211,4 +217,80 @@ def compute_signals(df,
     # ROC
     df['roc'] = tradingview_roc(df['close'], roc_length)
 
+    return df
+
+def generate_signal(
+    df,
+    window: int,
+    price_pct_threshold = 0.001,
+    volume_threshold = 0,
+
+    use_price_pct_level=False,
+    use_price_trend=True,
+    use_volume=False
+):
+
+    print("use_price_pct_level : ", use_price_pct_level)
+    print("use_price_trend : ", use_price_trend)
+    print("use_volume : ", use_volume)
+    # ---------------------------
+    # BASE CONDITIONS (level)
+    # ---------------------------
+
+
+    if use_price_pct_level:
+        cond_buy = df["price_pct"] > price_pct_threshold
+        cond_sell = df["price_pct"] < -price_pct_threshold
+        buy_threshold_streak = cond_buy.rolling(window).min() == 1
+        sell_threshold_streak = cond_sell.rolling(window).min() == 1
+    else:
+        buy_threshold_streak = pd.Series(True, index=df.index)
+        sell_threshold_streak = pd.Series(True, index=df.index)
+
+    # ---------------------------
+    # PRICE TREND (monotonic)
+    # ---------------------------
+    if use_price_trend:
+        price_diff = df["close"].diff()
+
+        cond_buy_trend = price_diff > 0
+        cond_sell_trend = price_diff < 0
+
+        buy_trend_streak = cond_buy_trend.rolling(window).min() == 1
+        sell_trend_streak = cond_sell_trend.rolling(window).min() == 1
+    else:
+        buy_trend_streak = pd.Series(True, index=df.index)
+        sell_trend_streak = pd.Series(True, index=df.index)
+
+    # ---------------------------
+    # VOLUME CONDITION
+    # ---------------------------
+    if use_volume:
+        print("use_volume : ", use_volume)
+        vol_diff = df["volume_participated"].diff()
+        # cond_vol = (df["volume_diff"] > volume_threshold)
+        cond_vol = vol_diff >= 0
+        vol_streak = cond_vol.rolling(window).min() == 1
+    else:
+        vol_streak = pd.Series(True, index=df.index)
+
+    # ---------------------------
+    # FINAL STREAKS
+    # ---------------------------
+    buy_streak = buy_threshold_streak & buy_trend_streak & vol_streak
+    sell_streak = sell_threshold_streak & sell_trend_streak & vol_streak
+
+    # ---------------------------
+    # SIGNAL
+    # ---------------------------
+    # df["predicted"] = np.where(
+    #     buy_streak, "BUY",
+    #     np.where(sell_streak, "SELL", None)
+    # )
+    conditions = [
+        buy_streak & ~sell_streak,
+        sell_streak & ~buy_streak
+    ]
+    choices = ["BUY", "SELL"]
+    df["predicted"] = np.select(conditions, choices, default=None)
     return df
