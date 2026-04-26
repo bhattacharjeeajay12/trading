@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 import itertools
 from tqdm import tqdm
-from utils import resample_fractional_minute, apply_trailing_logic, generate_signal
+from dev.utils import resample_fractional_minute, apply_trailing_logic, generate_signal
 
 # ==========================================
 # 1. DEFINE ALL INPUTS & HYPERPARAMETERS
