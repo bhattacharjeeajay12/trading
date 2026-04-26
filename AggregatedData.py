@@ -1,42 +1,94 @@
 import pandas as pd
-from typing import Dict, Any
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
 
 
-class AggregatedDataFraction:
+class AggregatedDataBlock:
 
-    def __init__(self, fraction: int):
-        # Initialize attributes
-        self.symbol: str = ""
-        self.tick_data: Dict[Any, Any] = None
-        self.df_aggregated: pd.DataFrame = pd.DataFrame()
+    def __init__(self, fraction: int, symbol):
         self.fraction: int = fraction
+        self.symbol: str = symbol
+        self.bucket_size_sec: int = 60 // fraction
+        self.df_aggregated: pd.DataFrame = pd.DataFrame()
 
-    def run(self, tick_data: Dict[Any, Any]) -> pd.DataFrame:
-        return df
+        # Internal state to track the "active" bucket
+        self.current_bucket_start: Optional[datetime] = None
+        self.current_data: Dict[str, Any] = {}
+
+    def _get_bucket_start(self, timestamp: datetime) -> datetime:
+        """Calculates the start of the bucket for a given timestamp."""
+        total_seconds = timestamp.minute * 60 + timestamp.second
+        # Find how many seconds into the current hour we are
+        # and floor it to the nearest bucket size
+        bucket_seconds = (total_seconds // self.bucket_size_sec) * self.bucket_size_sec
+
+        return timestamp.replace(minute=0, second=0, microsecond=0) + timedelta(seconds=bucket_seconds)
+
+    def run(self, tick: Dict[Any, Any]) -> pd.DataFrame:
+        # Parse the timestamp from the tick (using last_trade_time or local_time)
+        # Assuming last_trade_time is the source of truth for the market
+        # tick_time = datetime.strptime(tick["last_trade_time"], "%Y-%m-%dT%H:%M:%S")
+        tick_time = tick["last_trade_time"]
+        last_price = tick["last_price"]
+
+        bucket_start = self._get_bucket_start(tick_time)
+
+        # If this is the first tick or a new bucket has started
+        if self.current_bucket_start is None or bucket_start > self.current_bucket_start:
+            # If there was a previous bucket being tracked, we "finalize" it?
+            # In this implementation, we append to DF as soon as a bucket is closed or updated.
+            # To match your requirement, we create/update the row for the current bucket.
+            self.current_bucket_start = bucket_start
+
+            new_row = {
+                "bucket_time": bucket_start.strftime("%H:%M:%S"),
+                "open": last_price,
+                "high": last_price,
+                "low": last_price,
+                "close": last_price
+            }
+
+            # Create a new DataFrame entry
+            temp_df = pd.DataFrame([new_row])
+            self.df_aggregated = pd.concat([self.df_aggregated, temp_df], ignore_index=True)
+        else:
+            # Update the existing last row in the DataFrame
+            idx = self.df_aggregated.index[-1]
+            self.df_aggregated.at[idx, "high"] = max(self.df_aggregated.at[idx, "high"], last_price)
+            self.df_aggregated.at[idx, "low"] = min(self.df_aggregated.at[idx, "low"], last_price)
+            self.df_aggregated.at[idx, "close"] = last_price
+
+        # Calculate Derived Columns for the active row
+        idx = self.df_aggregated.index[-1]
+        close_val = self.df_aggregated.at[idx, "close"]
+        open_val = self.df_aggregated.at[idx, "open"]
+
+        return self.df_aggregated
 
 
 if __name__ == "__main__":
+    # Note: Use 'True' instead of 'true' for Python boolean
+    sample_tick_data = [
+        {
+            "last_price": 222.9,
+            "last_trade_time": "2026-04-24T09:15:02",
+            "symbol": "NIFTY26APR24000PE"
+        },
+        {
+            "last_price": 223.5,
+            "last_trade_time": "2026-04-24T09:15:08",
+            "symbol": "NIFTY26APR24000PE"
+        },
+        {
+            "last_price": 221.0,
+            "last_trade_time": "2026-04-24T09:15:12",  # This should trigger a new bucket (10s later)
+            "symbol": "NIFTY26APR24000PE"
+        }
+    ]
 
-    # Example usage:
 
-    sample_tick_data = [{"tradable": true, "mode": "full", "instrument_token": 18499586, "last_price": 222.9,
-                         "last_traded_quantity": 65, "average_traded_price": 188.87, "volume_traded": 214717620,
-                         "total_buy_quantity": 3118375, "total_sell_quantity": 409305,
-                         "ohlc": {"open": 130.0, "high": 276.0, "low": 79.75, "close": 119.6},
-                         "change": 86.371237458194, "last_trade_time": "2026-04-24T15:07:13", "oi": 7441265,
-                         "oi_day_high": 10454145, "oi_day_low": 6973265, "exchange_timestamp": null, "depth": {
-            "buy": [{"quantity": 845, "price": 221.85, "orders": 3}, {"quantity": 390, "price": 221.8, "orders": 3},
-                    {"quantity": 715, "price": 221.75, "orders": 5}, {"quantity": 845, "price": 221.7, "orders": 6},
-                    {"quantity": 1170, "price": 221.65, "orders": 9}],
-            "sell": [{"quantity": 195, "price": 222.3, "orders": 1}, {"quantity": 65, "price": 222.35, "orders": 1},
-                     {"quantity": 260, "price": 222.4, "orders": 1}, {"quantity": 845, "price": 222.45, "orders": 6},
-                     {"quantity": 715, "price": 222.5, "orders": 4}]}, "local_time": "2026-04-24 15:07:14.533",
-                         "symbol": "NIFTY26APR24000PE", "option_CE_PE": "PE", "option_type": "atm_plus_2.0",
-                         "strike": 24000.0}]
 
-    agg = AggregatedDataFraction(6)
-
-    for tick_data in sample_tick_data:
-        agg.run(tick_data)
-
-print("Class initialized successfully.")
+    for tick in sample_tick_data:
+        agg = AggregatedDataBlock(6, tick["symbol"])  # 10 second buckets
+        result_df = agg.run(tick)
+        print(result_df)
