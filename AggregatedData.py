@@ -1,6 +1,10 @@
+import logging
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
+from strategy.config import strategy_list
+
+logger = logging.getLogger(__name__)
 
 
 class AggregatedDataBlock:
@@ -10,10 +14,40 @@ class AggregatedDataBlock:
         self.symbol: str = symbol
         self.bucket_size_sec: int = 60 // fraction
         self.df_aggregated: pd.DataFrame = pd.DataFrame()
+        self.max_df_size = strategy_list["MomentBasedStrategy"]["window"]
 
         # Internal state to track the "active" bucket
         self.current_bucket_start: Optional[datetime] = None
         self.current_data: Dict[str, Any] = {}
+
+        logger.debug(
+            f"[symbol={self.symbol}] AggregatedDataBlock created | "
+            f"bucket_size_sec={self.bucket_size_sec} | max_df_size={self.max_df_size}"
+        )
+
+    @staticmethod
+    def _coerce_datetime(value: Any) -> Optional[datetime]:
+        """Accepts a datetime or an ISO/space-separated string and returns a datetime."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return None
+            # Common shapes: "2026-04-24T09:15:02", "2026-04-24T09:15:02+05:30",
+            # "2026-04-24 09:15:02.123" (from local_time formatter).
+            try:
+                return datetime.fromisoformat(s)
+            except ValueError:
+                pass
+            for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+                try:
+                    return datetime.strptime(s, fmt)
+                except ValueError:
+                    continue
+        return None
 
     def _get_bucket_start(self, timestamp: datetime) -> datetime:
         """Calculates the start of the bucket for a given timestamp."""
@@ -25,19 +59,33 @@ class AggregatedDataBlock:
         return timestamp.replace(minute=0, second=0, microsecond=0) + timedelta(seconds=bucket_seconds)
 
     def run(self, tick: Dict[Any, Any]) -> pd.DataFrame:
-        # Parse the timestamp from the tick (using last_trade_time or local_time)
-        # Assuming last_trade_time is the source of truth for the market
-        # tick_time = datetime.strptime(tick["last_trade_time"], "%Y-%m-%dT%H:%M:%S")
-        tick_time = tick["last_trade_time"]
-        last_price = tick["last_price"]
+        # Parse the timestamp from the tick (using last_trade_time, falling back to local_time).
+        # The streamer serialises datetimes to ISO strings before forwarding ticks, so we must
+        # accept both `datetime` objects and ISO/space-separated strings here.
+        raw_time = tick.get("last_trade_time") or tick.get("local_time")
+        tick_time = self._coerce_datetime(raw_time)
+        last_price = tick.get("last_price")
+
+        if tick_time is None or last_price is None:
+            logger.warning(
+                f"[symbol={self.symbol}] Tick skipped: invalid timestamp/price | "
+                f"raw_time={raw_time!r} | last_price={last_price!r}"
+            )
+            return self.df_aggregated
 
         bucket_start = self._get_bucket_start(tick_time)
 
-        # If this is the first tick or a new bucket has started
         if self.current_bucket_start is None or bucket_start > self.current_bucket_start:
-            # If there was a previous bucket being tracked, we "finalize" it?
-            # In this implementation, we append to DF as soon as a bucket is closed or updated.
-            # To match your requirement, we create/update the row for the current bucket.
+            # New bucket: log the closure of the previous one (if any) so each candle's
+            # final OHLC is visible in the log without grepping the dataframe.
+            if self.current_bucket_start is not None and not self.df_aggregated.empty:
+                prev = self.df_aggregated.iloc[-1]
+                # logger.info(
+                #     f"[symbol={self.symbol}] Bucket CLOSED "
+                #     f"{self.current_bucket_start.strftime('%H:%M:%S')} | "
+                #     f"O={prev['open']} H={prev['high']} L={prev['low']} C={prev['close']}"
+                # )
+
             self.current_bucket_start = bucket_start
 
             new_row = {
@@ -45,23 +93,25 @@ class AggregatedDataBlock:
                 "open": last_price,
                 "high": last_price,
                 "low": last_price,
-                "close": last_price
+                "close": last_price,
             }
-
-            # Create a new DataFrame entry
             temp_df = pd.DataFrame([new_row])
             self.df_aggregated = pd.concat([self.df_aggregated, temp_df], ignore_index=True)
+
+            # logger.info(
+            #     f"[symbol={self.symbol}] Bucket OPENED "
+            #     f"{bucket_start.strftime('%H:%M:%S')} | open={last_price} | "
+            #     f"df_rows={len(self.df_aggregated)}"
+            # )
         else:
-            # Update the existing last row in the DataFrame
             idx = self.df_aggregated.index[-1]
             self.df_aggregated.at[idx, "high"] = max(self.df_aggregated.at[idx, "high"], last_price)
             self.df_aggregated.at[idx, "low"] = min(self.df_aggregated.at[idx, "low"], last_price)
             self.df_aggregated.at[idx, "close"] = last_price
-
-        # Calculate Derived Columns for the active row
-        idx = self.df_aggregated.index[-1]
-        close_val = self.df_aggregated.at[idx, "close"]
-        open_val = self.df_aggregated.at[idx, "open"]
+            logger.debug(
+                f"[symbol={self.symbol}] Bucket UPDATE "
+                f"{self.current_bucket_start.strftime('%H:%M:%S')} | last_price={last_price}"
+            )
 
         return self.df_aggregated
 
