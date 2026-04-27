@@ -18,8 +18,9 @@ class MomentBasedStrategy(Strategy):
 
     def get_params(self):
         if self.name in strategies_list:
-            self.min_candle_required = strategies_list[self.name]["window"]
-            self.price_pct_threshold = strategies_list[self.name]["price_pct_threshold"]
+            params = strategies_list[self.name].get("strategy_params", {})
+            self.min_candle_required = params.get("window")
+            self.price_pct_threshold = params.get("price_pct_threshold")
         else:
             logger.error(f"Strategy params not found in config | name={self.name}")
 

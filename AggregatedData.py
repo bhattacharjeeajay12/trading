@@ -1,28 +1,55 @@
 import logging
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
-from strategy.config import strategies_list
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class AggregatedDataBlock:
+class BaseAggregator:
+    """
+    Minimal interface every data aggregator must implement.
 
-    def __init__(self, fraction: int, symbol):
-        self.fraction: int = fraction
-        self.symbol: str = symbol
-        self.bucket_size_sec: int = 60 // fraction
+    A new aggregator type (e.g. TickWindowAggregator, VolumeProfileAggregator)
+    only needs to:
+        1. Subclass `BaseAggregator`.
+        2. Accept `symbol` and any aggregator-specific params via __init__.
+        3. Implement `run(tick) -> pd.DataFrame` that ingests one tick and
+           returns the latest view of the aggregated dataframe.
+        4. Register itself in `AGGREGATOR_REGISTRY` (bottom of this file) and
+           add a matching entry to `aggregators_list` in strategy/config.py.
+    """
+
+    aggregator_name: str = "BaseAggregator"
+
+    def __init__(self, symbol: str):
+        self.symbol = symbol
         self.df_aggregated: pd.DataFrame = pd.DataFrame()
-        self.max_df_size = strategies_list["MomentBasedStrategy"]["window"]
+
+    def run(self, tick: Dict[Any, Any]) -> pd.DataFrame:
+        raise NotImplementedError
+
+
+class AggregatedDataBlock(BaseAggregator):
+    """
+    Time-bucketed OHLC aggregator. bucket_size_sec = 60 // fraction.
+    Registered in `AGGREGATOR_REGISTRY` as "OHLCAggregator".
+    """
+
+    aggregator_name: str = "OHLCAggregator"
+
+    def __init__(self, symbol: str, fraction: int = 6):
+        super().__init__(symbol=symbol)
+        self.fraction: int = fraction
+        self.bucket_size_sec: int = 60 // fraction
 
         # Internal state to track the "active" bucket
         self.current_bucket_start: Optional[datetime] = None
         self.current_data: Dict[str, Any] = {}
 
         logger.debug(
-            f"[symbol={self.symbol}] AggregatedDataBlock created | "
-            f"bucket_size_sec={self.bucket_size_sec} | max_df_size={self.max_df_size}"
+            f"[symbol={self.symbol}] {self.aggregator_name} created | "
+            f"bucket_size_sec={self.bucket_size_sec}"
         )
 
     @staticmethod
@@ -116,29 +143,37 @@ class AggregatedDataBlock:
         return self.df_aggregated
 
 
+# ----------------------------------------------------------------------------
+# Aggregator registry.
+# Every aggregator listed in `aggregators_list` (strategy/config.py) must
+# resolve to a concrete class here. The pipeline uses this dict to instantiate
+# the aggregators required by deployed strategies.
+# ----------------------------------------------------------------------------
+AGGREGATOR_REGISTRY: Dict[str, type] = {
+    "OHLCAggregator": AggregatedDataBlock,
+}
+
+
 if __name__ == "__main__":
-    # Note: Use 'True' instead of 'true' for Python boolean
     sample_tick_data = [
         {
             "last_price": 222.9,
             "last_trade_time": "2026-04-24T09:15:02",
-            "symbol": "NIFTY26APR24000PE"
+            "symbol": "NIFTY26APR24000PE",
         },
         {
             "last_price": 223.5,
             "last_trade_time": "2026-04-24T09:15:08",
-            "symbol": "NIFTY26APR24000PE"
+            "symbol": "NIFTY26APR24000PE",
         },
         {
             "last_price": 221.0,
-            "last_trade_time": "2026-04-24T09:15:12",  # This should trigger a new bucket (10s later)
-            "symbol": "NIFTY26APR24000PE"
-        }
+            "last_trade_time": "2026-04-24T09:15:12",
+            "symbol": "NIFTY26APR24000PE",
+        },
     ]
 
-
-
+    agg = AggregatedDataBlock(symbol="NIFTY26APR24000PE", fraction=6)
     for tick in sample_tick_data:
-        agg = AggregatedDataBlock(6, tick["symbol"])  # 10 second buckets
         result_df = agg.run(tick)
         print(result_df)

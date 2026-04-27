@@ -135,3 +135,60 @@ crontab -e
 # Or remove all cron jobs
 crontab -r
 ```
+
+## Adding a New Strategy
+
+What runs at trading time is fully driven by `strategies_list` in
+[strategy/config.py](strategy/config.py). Each strategy declares which
+data-aggregation mechanism it consumes, so a new strategy can either reuse an
+existing aggregator or ship its own.
+
+### Steps
+
+1. **Write the strategy class** in a new file under [strategy/](strategy/),
+   subclassing `Strategy`. Set `self.name` to a unique string and implement
+   `run(df)` so it sets `self.signal` to `1` for BUY or `0` otherwise.
+
+2. **(Only if the strategy needs a new aggregator)** Add the aggregator:
+   - Subclass `BaseAggregator` in [AggregatedData.py](AggregatedData.py) and
+     implement `run(tick) -> pd.DataFrame`.
+   - Register the class in `AGGREGATOR_REGISTRY` at the bottom of that file.
+   - Add a descriptive entry to `aggregators_list` in
+     [strategy/config.py](strategy/config.py).
+
+3. **Register the strategy class** in `STRATEGY_REGISTRY` in
+   [strategy/registry.py](strategy/registry.py).
+
+4. **Declare the strategy in config** by adding an entry to `strategies_list`
+   in [strategy/config.py](strategy/config.py):
+
+   ```python
+   "VolumeSpikeStrategy": {
+       "strategy_name": "VolumeSpikeStrategy",
+       "aggregator": "TickWindowAggregator",
+       "aggregator_params": {"window_ticks": 100},
+       "strategy_params": {"volume_multiplier": 3.0},
+       "is_deployed": True,
+   },
+   ```
+
+That's it -- the pipeline picks it up at next start. No edits to
+`nifty_option_streamer.py`, `DataDecisionPipeline.py`, or `DataKeeper.py` are
+needed.
+
+### Runtime behaviour to be aware of
+
+- **Single buy per tick.** Deployed strategies are evaluated in
+  `strategies_list` insertion order. The first strategy returning
+  `signal == 1` opens the trade; remaining strategies are skipped for that
+  tick. Re-order keys in the config to change priority.
+- **Disabling a strategy.** Flip `is_deployed` to `False` (or remove the key).
+  Pipeline logs `Strategy disabled in config | name=...` at startup, and any
+  aggregator no longer required by a deployed strategy is dropped from the
+  per-symbol set.
+- **Aggregator deduplication.** If two deployed strategies request the same
+  aggregator with the same params, `DataKeeper` builds it once per symbol and
+  shares it.
+- **Per-trade traceability.** Logs always carry the firing strategy:
+  `BUY ORDER PLACED | ... | strategy=MomentBasedStrategy` and
+  `POSITION CLOSED | ... | strategy=MomentBasedStrategy`.
