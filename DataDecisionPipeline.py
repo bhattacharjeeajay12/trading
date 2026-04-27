@@ -37,6 +37,11 @@ class DataDecisionPipeline:
         self.active_positions: Dict[str, StopLoss] = {}
         self.order_ids: Dict[str, Optional[str]] = {}
 
+        logger.info(
+            f"DataDecisionPipeline initialised | fraction={fraction} | "
+            f"strategy={self.strategy.name}"
+        )
+
     def process_tick(self, tick: Dict[str, Any]) -> None:
         """Entry point for every tick coming from the streamer."""
         symbol = tick.get("symbol")

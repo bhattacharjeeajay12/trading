@@ -60,6 +60,15 @@ console_handler.addFilter(NoTickDataFilter())
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+# Attach the same handlers to the root logger so messages from sibling modules
+# (DataKeeper, AggregatedData, DataDecisionPipeline, MomentBasedStrategy, StopLoss)
+# all land in the same file/console stream.
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+if not root_logger.handlers:
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
 
 class NiftyOptionStreamer:
     """
