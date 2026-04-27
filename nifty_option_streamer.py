@@ -12,6 +12,8 @@ load_dotenv()
 from datetime import datetime, timezone, timedelta, time
 from twisted.internet import reactor
 
+from DataKeeper import DataKeeper
+from strategy.MomentBasedStrategy import MomentBasedStrategy
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -99,7 +101,10 @@ class NiftyOptionStreamer:
         self.kws = None
         self.kite = None
         self.reconnect_attempts = 0
+        self.fraction = 6
         self.market_ended = False  # Flag to prevent reconnection after market end
+        self.DataKeeper = DataKeeper(self.fraction)
+        self.strategy = MomentBasedStrategy()
 
         logger.info(f"Initialized NiftyOptionStreamer with depth={depth}, expiry={expiry}")
 
@@ -272,6 +277,8 @@ class NiftyOptionStreamer:
 
         if to_unsub and self.kws:
             self.kws.unsubscribe(list(to_unsub))
+            for sub in to_unsub:
+                self.DataKeeper.run("DELETE", tick_data=None, symbol=self.token_map[sub]["symbol"])
             logger.info(f"Unsubscribed from {len(to_unsub)} tokens")
 
         if to_sub and self.kws:
@@ -356,8 +363,17 @@ class NiftyOptionStreamer:
                 tick_serializable.update(metadata)
 
                 tick_serializable = convert_datetime(tick_serializable)
+                
+                logger.info(f"tick_data: {local_time} | {tick_serializable}")
 
-                logger.info(f"tick_data: {local_time} | {json.dumps(tick_serializable)}")
+                # Call dataKeeper to keep the data
+                self.DataKeeper.run(purpose="ADD", tick_data=tick_serializable, symbol=tick_serializable['symbol'])
+
+            # Build strategy
+            for symbol_name, AggregatedBlock in self.DataKeeper.DataAggDict.items():
+                if AggregatedBlock:
+                    self.strategy.run(AggregatedBlock.df_aggregated)
+
 
         except Exception as e:
             logger.error(f"Error processing ticks: {e}", exc_info=True)

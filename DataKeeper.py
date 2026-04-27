@@ -25,6 +25,7 @@ class DataKeeper:
             symbol = tick_data.get("symbol")
 
         if not symbol:
+            # Symbol not found
             return
 
         if purpose == "DELETE":
