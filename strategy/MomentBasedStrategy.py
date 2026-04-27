@@ -1,8 +1,6 @@
-from IPython.terminal.shortcuts import previous_history_or_previous_completion
-
-from Strategy import Strategy
+from strategy.Strategy import Strategy
 import pandas as pd
-from config import strategy_list
+from strategy.config import strategy_list
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

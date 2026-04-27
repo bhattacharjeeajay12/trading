@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-
+from strategy.config import strategy_list
 
 class AggregatedDataBlock:
 
@@ -10,6 +10,7 @@ class AggregatedDataBlock:
         self.symbol: str = symbol
         self.bucket_size_sec: int = 60 // fraction
         self.df_aggregated: pd.DataFrame = pd.DataFrame()
+        self.max_df_size = strategy_list["MomentBasedStrategy"]["window"]
 
         # Internal state to track the "active" bucket
         self.current_bucket_start: Optional[datetime] = None
