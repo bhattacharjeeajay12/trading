@@ -2,7 +2,7 @@ import logging
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from strategy.config import strategy_list
+from strategy.config import strategies_list
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ class AggregatedDataBlock:
         self.symbol: str = symbol
         self.bucket_size_sec: int = 60 // fraction
         self.df_aggregated: pd.DataFrame = pd.DataFrame()
-        self.max_df_size = strategy_list["MomentBasedStrategy"]["window"]
+        self.max_df_size = strategies_list["MomentBasedStrategy"]["window"]
 
         # Internal state to track the "active" bucket
         self.current_bucket_start: Optional[datetime] = None

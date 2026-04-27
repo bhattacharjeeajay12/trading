@@ -1,6 +1,5 @@
 import logging
 from typing import Any, Dict, Optional
-from config import strategy_list
 logger = logging.getLogger(__name__)
 
 
@@ -21,8 +20,9 @@ class StopLoss:
     STATUS_EXITED = "EXITED"
     STATUS_ERROR = "ERROR"
 
-    def __init__(self, stop_loss_pct: float = 0.98):
+    def __init__(self, stop_loss_pct: float = 0.98, new_stop_loss_pct: float = 0.99):
         self.stop_loss_pct: float = stop_loss_pct
+        self.new_stop_loss_pct = new_stop_loss_pct
         self.buy_price: Optional[float] = None
         self.highest_ltp: Optional[float] = None
         self.stop_loss_price: Optional[float] = None
@@ -33,6 +33,7 @@ class StopLoss:
         self.order_id: Optional[str] = None
         self.exit_target_pct: float = 0.01
         self.strategy_name: Optional[str] = None
+        self.has_crossed_exit_target = False
 
     def _tag(self) -> str:
         """Uniform prefix so logs from multiple concurrent trades stay greppable."""
@@ -69,6 +70,7 @@ class StopLoss:
         self.buy_price = self.get_buy_value(buy_order_id, tick=tick)
         self.highest_ltp = self.buy_price
         self.stop_loss_price = self.buy_price * self.stop_loss_pct
+        self.exit_target_price = self.buy_price * self.exit_target_pct
         self.place_stop_loss_order()
         logger.info(
             f"{self._tag()} StopLoss ARMED | buy_price={self.buy_price} | "
@@ -101,8 +103,8 @@ class StopLoss:
                 )
                 return self.STATUS_EXITED
 
-            has_crossed_exit_target = False
-            if ltp < self.exit_target_price and not has_crossed_exit_target:
+
+            if ltp < self.exit_target_price and not self.has_crossed_exit_target:
                 if ltp > self.highest_ltp:
                     old_sl = self.stop_loss_price
                     self.highest_ltp = ltp
@@ -118,7 +120,7 @@ class StopLoss:
             else:
                 # ltp has crossed exit target
                 if ltp > self.highest_ltp:
-                    has_crossed_exit_target = True
+                    self.has_crossed_exit_target = True
                     old_sl = self.stop_loss_price
                     self.highest_ltp = ltp
                     self.stop_loss_price = ltp * self.new_stop_loss_pct

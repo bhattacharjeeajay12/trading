@@ -1,6 +1,6 @@
 from strategy.Strategy import Strategy
 import pandas as pd
-from strategy.config import strategy_list
+from strategy.config import strategies_list
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,9 +17,9 @@ class MomentBasedStrategy(Strategy):
         logger.info(f"Strategy initialised | name={self.name}")
 
     def get_params(self):
-        if self.name in strategy_list:
-            self.min_candle_required = strategy_list[self.name]["window"]
-            self.price_pct_threshold = strategy_list[self.name]["price_pct_threshold"]
+        if self.name in strategies_list:
+            self.min_candle_required = strategies_list[self.name]["window"]
+            self.price_pct_threshold = strategies_list[self.name]["price_pct_threshold"]
         else:
             logger.error(f"Strategy params not found in config | name={self.name}")
 

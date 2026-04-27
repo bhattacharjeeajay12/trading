@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 from DataKeeper import DataKeeper
 from strategy.MomentBasedStrategy import MomentBasedStrategy
 from strategy.StopLoss import StopLoss
+from strategy.config import stoploss_dict
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,8 @@ class DataDecisionPipeline:
         try:
             order_id = self._place_order()
             self.order_ids[symbol] = order_id
-            self.active_positions[symbol] = StopLoss()
+            # come_here
+            self.active_positions[symbol] = StopLoss(stoploss_dict["stop_loss_pct"], stoploss_dict["new_stop_loss_pct"])
             logger.info(
                 f"[order_id={order_id} symbol={symbol}] BUY ORDER PLACED | "
                 f"signal=BUY | ltp={tick.get('last_price')} | "
