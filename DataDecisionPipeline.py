@@ -39,8 +39,8 @@ class DataDecisionPipeline:
 
     def process_tick(self, tick: Dict[str, Any]) -> None:
         """Entry point for every tick coming from the streamer."""
+        symbol = tick.get("symbol")
         try:
-            symbol = tick.get("symbol")
             if not symbol or symbol == self.INDEX_SYMBOL:
                 return
 
@@ -52,7 +52,10 @@ class DataDecisionPipeline:
                 self._evaluate_strategy(symbol, tick)
 
         except Exception as e:
-            logger.error(f"DataDecisionPipeline.process_tick failed: {e}", exc_info=True)
+            logger.error(
+                f"DataDecisionPipeline.process_tick failed for symbol={symbol}: {e}",
+                exc_info=True,
+            )
 
     def remove_symbol(self, symbol: str) -> None:
         """Drop a symbol's aggregator and any open-position tracker."""
@@ -60,6 +63,14 @@ class DataDecisionPipeline:
             if not symbol:
                 return
             self.data_keeper.run(purpose="DELETE", tick_data=None, symbol=symbol)
+            # Surface the (rare but real) case where ATM moved out from under
+            # an open trade, so a position is being abandoned without an exit.
+            if symbol in self.active_positions:
+                logger.warning(
+                    f"[order_id={self.order_ids.get(symbol)} symbol={symbol}] "
+                    f"Active trade dropped due to unsubscribe (ATM moved). "
+                    f"No exit was placed."
+                )
             self.active_positions.pop(symbol, None)
             self.order_ids.pop(symbol, None)
         except Exception as e:
@@ -90,9 +101,13 @@ class DataDecisionPipeline:
             order_id = self._place_order()
             self.order_ids[symbol] = order_id
             self.active_positions[symbol] = StopLoss()
-            logger.info(f"Opened position for {symbol} (order_id={order_id}) @ {tick.get('last_price')}")
+            logger.info(
+                f"[order_id={order_id} symbol={symbol}] BUY ORDER PLACED | "
+                f"signal=BUY | ltp={tick.get('last_price')} | "
+                f"strategy={self.strategy.name}"
+            )
         except Exception as e:
-            logger.error(f"Failed to open position for {symbol}: {e}", exc_info=True)
+            logger.error(f"Failed to open position for symbol={symbol}: {e}", exc_info=True)
 
     def _manage_open_position(self, symbol: str, tick: Dict[str, Any]) -> None:
         """Forward tick to the symbol's StopLoss; clear tracker on exit."""
@@ -100,13 +115,20 @@ class DataDecisionPipeline:
         if sl is None:
             return
 
+        order_id = self.order_ids.get(symbol)
         try:
-            status = sl.run(tick, self.order_ids.get(symbol))
+            status = sl.run(tick, order_id)
         except Exception as e:
-            logger.error(f"StopLoss.run failed for {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"[order_id={order_id} symbol={symbol}] StopLoss.run failed: {e}",
+                exc_info=True,
+            )
             return
 
         if status == "EXITED":
-            logger.info(f"Position closed for {symbol}")
+            logger.info(
+                f"[order_id={order_id} symbol={symbol}] POSITION CLOSED | "
+                f"symbol eligible for re-entry on next tick"
+            )
             self.active_positions.pop(symbol, None)
             self.order_ids.pop(symbol, None)

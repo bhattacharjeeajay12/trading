@@ -28,6 +28,13 @@ class StopLoss:
         self.stop_loss_price: Optional[float] = None
         self.is_active: bool = True
         self.sl_update_count: int = 0
+        # Stashed during _initialise so every subsequent log line can be tagged.
+        self.symbol: Optional[str] = None
+        self.order_id: Optional[str] = None
+
+    def _tag(self) -> str:
+        """Uniform prefix so logs from multiple concurrent trades stay greppable."""
+        return f"[order_id={self.order_id} symbol={self.symbol}]"
 
     def place_stop_loss_order(self) -> None:
         # TODO Zerodha: place initial SL-M / SL-L order at self.stop_loss_price.
@@ -55,13 +62,15 @@ class StopLoss:
         """Look up fill price for the buy order and arm the initial SL."""
         # TODO Zerodha: fetch actual fill price from buy_order_id via kite.orders().
         # Hardcoded fallback so the pipeline keeps running without a broker.
+        self.order_id = buy_order_id
+        self.symbol = tick.get("symbol") if tick else None
         self.buy_price = self.get_buy_value(buy_order_id, tick=tick)
         self.highest_ltp = self.buy_price
         self.stop_loss_price = self.buy_price * self.stop_loss_pct
         self.place_stop_loss_order()
         logger.info(
-            f"StopLoss initialised: buy_price={self.buy_price}, "
-            f"stop_loss_price={self.stop_loss_price}, order_id={buy_order_id}"
+            f"{self._tag()} StopLoss ARMED | buy_price={self.buy_price} | "
+            f"initial_sl_price={self.stop_loss_price:.2f} | sl_pct={self.stop_loss_pct}"
         )
         return self.STATUS_INITIALISED
 
@@ -81,25 +90,30 @@ class StopLoss:
             if ltp <= self.stop_loss_price:
                 self.place_market_order()
                 self.is_active = False
+                pnl = ltp - self.buy_price
+                pnl_pct = (pnl / self.buy_price) * 100 if self.buy_price else 0.0
                 logger.info(
-                    f"StopLoss triggered: ltp={ltp} <= stop_loss_price={self.stop_loss_price}"
+                    f"{self._tag()} StopLoss EXIT | exit_ltp={ltp} | buy_price={self.buy_price} | "
+                    f"sl_price={self.stop_loss_price:.2f} | pnl={pnl:+.2f} ({pnl_pct:+.2f}%) | "
+                    f"sl_updates={self.sl_update_count}"
                 )
                 return self.STATUS_EXITED
 
             if ltp > self.highest_ltp:
+                old_sl = self.stop_loss_price
                 self.highest_ltp = ltp
                 self.stop_loss_price = ltp * self.stop_loss_pct
                 self.sl_update_count += 1
-                # Use the above changed self.stop_loss_price to update_stop_loss_order
                 self.update_stop_loss_order()
                 logger.info(
-                    f"StopLoss trailed: highest_ltp={self.highest_ltp}, "
-                    f"new stop_loss_price={self.stop_loss_price}"
+                    f"{self._tag()} StopLoss TRAIL #{self.sl_update_count} | ltp={ltp} | "
+                    f"highest_ltp={self.highest_ltp} | "
+                    f"sl_price {old_sl:.2f} -> {self.stop_loss_price:.2f}"
                 )
                 return self.STATUS_TRAILED
 
             return self.STATUS_HOLDING
 
         except Exception as e:
-            logger.error(f"StopLoss.run error: {e}", exc_info=True)
+            logger.error(f"{self._tag()} StopLoss.run error: {e}", exc_info=True)
             return self.STATUS_ERROR
