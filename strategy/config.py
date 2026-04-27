@@ -8,6 +8,7 @@ strategies_list = {
 	}
 }
 
+
 stoploss_dict = {
     "stop_loss_pct": 0.98,
     "new_stop_loss_pct": 0.99,
