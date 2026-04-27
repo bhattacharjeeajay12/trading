@@ -35,6 +35,7 @@ class StopLoss:
 
     def update_stop_loss_order(self) -> None:
         # TODO Zerodha: modify existing SL order to new self.stop_loss_price.
+
         pass
 
     def place_market_order(self) -> None:
@@ -45,11 +46,16 @@ class StopLoss:
         # TODO Zerodha: cancel the live SL order.
         pass
 
-    def _initialise(self, buy_order_id: Optional[str]) -> str:
+    def get_buy_value(self, buy_order_id: str, tick=None) -> float:
+        # todo : Query zerodha to get the actual buy value for the order
+        # For testing the buy_price is taken as ltp
+        return tick["last_price"]
+
+    def _initialise(self, buy_order_id: Optional[str], tick: Dict[str, Any] | None = None) -> str:
         """Look up fill price for the buy order and arm the initial SL."""
         # TODO Zerodha: fetch actual fill price from buy_order_id via kite.orders().
         # Hardcoded fallback so the pipeline keeps running without a broker.
-        self.buy_price = 200.0
+        self.buy_price = self.get_buy_value(buy_order_id, tick=tick)
         self.highest_ltp = self.buy_price
         self.stop_loss_price = self.buy_price * self.stop_loss_pct
         self.place_stop_loss_order()
@@ -66,7 +72,7 @@ class StopLoss:
                 return self.STATUS_EXITED
 
             if self.buy_price is None:
-                return self._initialise(buy_order_id)
+                return self._initialise(buy_order_id, tick)
 
             ltp = tick.get("last_price")
             if ltp is None:
@@ -84,6 +90,7 @@ class StopLoss:
                 self.highest_ltp = ltp
                 self.stop_loss_price = ltp * self.stop_loss_pct
                 self.sl_update_count += 1
+                # Use the above changed self.stop_loss_price to update_stop_loss_order
                 self.update_stop_loss_order()
                 logger.info(
                     f"StopLoss trailed: highest_ltp={self.highest_ltp}, "

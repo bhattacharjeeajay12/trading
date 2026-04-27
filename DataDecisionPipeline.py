@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Dict, Any, Optional
 
 from DataKeeper import DataKeeper
@@ -79,12 +80,14 @@ class DataDecisionPipeline:
         if self.strategy.signal == 1:
             self._open_position(symbol, tick)
 
+    def _place_order(self)-> str:
+        # TODO Zerodha: place buy market order via kite.place_order(...) and capture the real order id from the broker response.
+        return str(uuid.uuid4())
+
     def _open_position(self, symbol: str, tick: Dict[str, Any]) -> None:
         """Place a buy order (placeholder) and start tracking stop-loss."""
         try:
-            # TODO Zerodha: place buy market order via kite.place_order(...)
-            # and capture the real order id from the broker response.
-            order_id = None
+            order_id = self._place_order()
             self.order_ids[symbol] = order_id
             self.active_positions[symbol] = StopLoss()
             logger.info(f"Opened position for {symbol} (order_id={order_id}) @ {tick.get('last_price')}")
