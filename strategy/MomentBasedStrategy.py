@@ -30,8 +30,8 @@ class MomentBasedStrategy(Strategy):
         """
         df_slice = self.df.tail(self.min_candle_required)
         cond_pct = (df_slice["price_pct"] > self.price_pct_threshold).all() and (df_slice["price_pct"] > 0).all()
-        cond_mono = df_slice["price_chg"].is_monotonic_increasing and (df_slice["price_chg"] > 0).all()
-        if cond_mono and cond_pct:
+        # cond_mono = df_slice["price_chg"].is_monotonic_increasing and (df_slice["price_chg"] > 0).all()
+        if cond_pct:
             self.signal = 1 # BUY
             logger.info(f"Buy Signal detected for strategy: {self.name}")
             return

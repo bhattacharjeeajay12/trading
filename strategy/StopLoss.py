@@ -88,7 +88,7 @@ class StopLoss:
                 return self.STATUS_HOLDING
 
             if ltp <= self.stop_loss_price:
-                self.place_market_order()
+                self.place_market_order() # check if sell is executed
                 self.is_active = False
                 pnl = ltp - self.buy_price
                 pnl_pct = (pnl / self.buy_price) * 100 if self.buy_price else 0.0
