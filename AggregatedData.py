@@ -80,11 +80,11 @@ class AggregatedDataBlock:
             # final OHLC is visible in the log without grepping the dataframe.
             if self.current_bucket_start is not None and not self.df_aggregated.empty:
                 prev = self.df_aggregated.iloc[-1]
-                logger.info(
-                    f"[symbol={self.symbol}] Bucket CLOSED "
-                    f"{self.current_bucket_start.strftime('%H:%M:%S')} | "
-                    f"O={prev['open']} H={prev['high']} L={prev['low']} C={prev['close']}"
-                )
+                # logger.info(
+                #     f"[symbol={self.symbol}] Bucket CLOSED "
+                #     f"{self.current_bucket_start.strftime('%H:%M:%S')} | "
+                #     f"O={prev['open']} H={prev['high']} L={prev['low']} C={prev['close']}"
+                # )
 
             self.current_bucket_start = bucket_start
 
@@ -98,11 +98,11 @@ class AggregatedDataBlock:
             temp_df = pd.DataFrame([new_row])
             self.df_aggregated = pd.concat([self.df_aggregated, temp_df], ignore_index=True)
 
-            logger.info(
-                f"[symbol={self.symbol}] Bucket OPENED "
-                f"{bucket_start.strftime('%H:%M:%S')} | open={last_price} | "
-                f"df_rows={len(self.df_aggregated)}"
-            )
+            # logger.info(
+            #     f"[symbol={self.symbol}] Bucket OPENED "
+            #     f"{bucket_start.strftime('%H:%M:%S')} | open={last_price} | "
+            #     f"df_rows={len(self.df_aggregated)}"
+            # )
         else:
             idx = self.df_aggregated.index[-1]
             self.df_aggregated.at[idx, "high"] = max(self.df_aggregated.at[idx, "high"], last_price)

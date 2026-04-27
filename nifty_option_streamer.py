@@ -376,7 +376,7 @@ class NiftyOptionStreamer:
 
                 tick_serializable = convert_datetime(tick_serializable)
                 
-                logger.info(f"tick_data: {local_time} | {tick_serializable}")
+                # logger.info(f"tick_data: {local_time} | {tick_serializable}")
 
                 # newly added
                 self.pipeline.process_tick(tick_serializable)

@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Dict, Optional
-
+from config import strategy_list
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +31,8 @@ class StopLoss:
         # Stashed during _initialise so every subsequent log line can be tagged.
         self.symbol: Optional[str] = None
         self.order_id: Optional[str] = None
+        self.exit_target_pct: float = 0.01
+        self.strategy_name: Optional[str] = None
 
     def _tag(self) -> str:
         """Uniform prefix so logs from multiple concurrent trades stay greppable."""
@@ -99,18 +101,36 @@ class StopLoss:
                 )
                 return self.STATUS_EXITED
 
-            if ltp > self.highest_ltp:
-                old_sl = self.stop_loss_price
-                self.highest_ltp = ltp
-                self.stop_loss_price = ltp * self.stop_loss_pct
-                self.sl_update_count += 1
-                self.update_stop_loss_order()
-                logger.info(
-                    f"{self._tag()} StopLoss TRAIL #{self.sl_update_count} | ltp={ltp} | "
-                    f"highest_ltp={self.highest_ltp} | "
-                    f"sl_price {old_sl:.2f} -> {self.stop_loss_price:.2f}"
-                )
-                return self.STATUS_TRAILED
+            has_crossed_exit_target = False
+            if ltp < self.exit_target_price and not has_crossed_exit_target:
+                if ltp > self.highest_ltp:
+                    old_sl = self.stop_loss_price
+                    self.highest_ltp = ltp
+                    self.stop_loss_price = ltp * self.stop_loss_pct
+                    self.sl_update_count += 1
+                    self.update_stop_loss_order()
+                    logger.info(
+                        f"{self._tag()} StopLoss TRAIL #{self.sl_update_count} | ltp={ltp} | "
+                        f"highest_ltp={self.highest_ltp} | "
+                        f"sl_price {old_sl:.2f} -> {self.stop_loss_price:.2f}"
+                    )
+                    return self.STATUS_TRAILED
+            else:
+                # ltp has crossed exit target
+                if ltp > self.highest_ltp:
+                    has_crossed_exit_target = True
+                    old_sl = self.stop_loss_price
+                    self.highest_ltp = ltp
+                    self.stop_loss_price = ltp * self.new_stop_loss_pct
+                    self.sl_update_count += 1
+                    self.update_stop_loss_order()
+                    logger.info(
+                        f"{self._tag()} StopLoss TRAIL after exit target #{self.sl_update_count} | ltp={ltp} | "
+                        f"highest_ltp={self.highest_ltp} | "
+                        f"sl_price {old_sl:.2f} -> {self.stop_loss_price:.2f}"
+                    )
+                    return self.STATUS_TRAILED
+
 
             return self.STATUS_HOLDING
 
