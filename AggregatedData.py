@@ -16,6 +16,30 @@ class AggregatedDataBlock:
         self.current_bucket_start: Optional[datetime] = None
         self.current_data: Dict[str, Any] = {}
 
+    @staticmethod
+    def _coerce_datetime(value: Any) -> Optional[datetime]:
+        """Accepts a datetime or an ISO/space-separated string and returns a datetime."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return None
+            # Common shapes: "2026-04-24T09:15:02", "2026-04-24T09:15:02+05:30",
+            # "2026-04-24 09:15:02.123" (from local_time formatter).
+            try:
+                return datetime.fromisoformat(s)
+            except ValueError:
+                pass
+            for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+                try:
+                    return datetime.strptime(s, fmt)
+                except ValueError:
+                    continue
+        return None
+
     def _get_bucket_start(self, timestamp: datetime) -> datetime:
         """Calculates the start of the bucket for a given timestamp."""
         total_seconds = timestamp.minute * 60 + timestamp.second
@@ -26,11 +50,16 @@ class AggregatedDataBlock:
         return timestamp.replace(minute=0, second=0, microsecond=0) + timedelta(seconds=bucket_seconds)
 
     def run(self, tick: Dict[Any, Any]) -> pd.DataFrame:
-        # Parse the timestamp from the tick (using last_trade_time or local_time)
-        # Assuming last_trade_time is the source of truth for the market
-        # tick_time = datetime.strptime(tick["last_trade_time"], "%Y-%m-%dT%H:%M:%S")
-        tick_time = tick["last_trade_time"]
-        last_price = tick["last_price"]
+        # Parse the timestamp from the tick (using last_trade_time, falling back to local_time).
+        # The streamer serialises datetimes to ISO strings before forwarding ticks, so we must
+        # accept both `datetime` objects and ISO/space-separated strings here.
+        raw_time = tick.get("last_trade_time") or tick.get("local_time")
+        tick_time = self._coerce_datetime(raw_time)
+        last_price = tick.get("last_price")
+
+        if tick_time is None or last_price is None:
+            # Cannot aggregate without a valid timestamp + price; skip silently.
+            return self.df_aggregated
 
         bucket_start = self._get_bucket_start(tick_time)
 
