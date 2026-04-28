@@ -148,22 +148,20 @@ def resample_fractional_minute(original_df, time_col, n=4, depth=True):
     # -----------------------------
     df["minute"] = df[time_col].dt.floor("min")
 
-    # minute_ohlc = df.groupby("minute")["last_price"].agg(
-    #     minute_open="first",
-    #     minute_high="max",
-    #     minute_low="min",
-    #     minute_close="last"
-    # ).reset_index()
+    agg_dict = dict(
+        minute_open=("last_price", "first"),
+        minute_high=("last_price", "max"),
+        minute_low=("last_price", "min"),
+        minute_close=("last_price", "last"),
+    )
+
+    if depth:
+        agg_dict["depth_list"] = ("depth", list)
+        agg_dict["ltp_list"] = ("last_price", list)
+
     minute_ohlc = (
         df.groupby("minute")
-        .agg(
-            minute_open=("last_price", "first"),
-            minute_high=("last_price", "max"),
-            minute_low=("last_price", "min"),
-            minute_close=("last_price", "last"),
-            depth_list=("depth", list),
-            ltp_list = ("last_price", list)
-        )
+        .agg(**agg_dict)
         .reset_index()
     )
 
@@ -190,13 +188,10 @@ def resample_fractional_minute(original_df, time_col, n=4, depth=True):
     # Step 3: OHLC per bucket
     # -----------------------------
     out = df.groupby(["bucket_time", "minute"]).agg(
-        # Price aggregations
         open=("last_price", "first"),
         high=("last_price", "max"),
         low=("last_price", "min"),
         close=("last_price", "last"),
-
-        # Volume aggregations
         volume_open=("volume_at_tick", "first"),
         volume_high=("volume_at_tick", "max"),
         volume_low=("volume_at_tick", "min"),
@@ -206,10 +201,91 @@ def resample_fractional_minute(original_df, time_col, n=4, depth=True):
     # -----------------------------
     # Step 4: Attach candle type
     # -----------------------------
-    out = out.merge(minute_ohlc[["minute", "candle_type", "minute_open", "minute_high", "minute_low", "minute_close", "depth_list", "ltp_list"]],
-                    on="minute",
-                    how="left")
+    merge_cols = [
+        "minute",
+        "candle_type",
+        "minute_open",
+        "minute_high",
+        "minute_low",
+        "minute_close"
+    ]
+
+    if depth:
+        merge_cols += ["depth_list", "ltp_list"]
+
+    out = out.merge(
+        minute_ohlc[merge_cols],
+        on="minute",
+        how="left"
+    )
+
     return out
+
+# def resample_fractional_minute(original_df, time_col, n=4, depth=True):
+#     df = original_df.copy()
+#     df[time_col] = pd.to_datetime(df[time_col])
+#     df = df.sort_values(time_col)
+#
+#     # -----------------------------
+#     # Step 1: Minute-level OHLC
+#     # -----------------------------
+#     df["minute"] = df[time_col].dt.floor("min")
+#     minute_ohlc = (
+#         df.groupby("minute")
+#         .agg(
+#             minute_open=("last_price", "first"),
+#             minute_high=("last_price", "max"),
+#             minute_low=("last_price", "min"),
+#             minute_close=("last_price", "last"),
+#             depth_list=("depth", list),
+#             ltp_list = ("last_price", list)
+#         )
+#         .reset_index()
+#     )
+#
+#     # Candle type
+#     minute_ohlc["candle_type"] = np.where(
+#         minute_ohlc["minute_close"] > minute_ohlc["minute_open"],
+#         "BUY",
+#         "SELL"
+#     )
+#
+#     # -----------------------------
+#     # Step 2: Fractional buckets
+#     # -----------------------------
+#     bucket_size = 60 // n
+#
+#     df["sec"] = df[time_col].dt.second
+#     df["bucket"] = df["sec"] // bucket_size
+#
+#     df["bucket_time"] = df["minute"] + pd.to_timedelta(
+#         df["bucket"] * bucket_size, unit="s"
+#     )
+#
+#     # -----------------------------
+#     # Step 3: OHLC per bucket
+#     # -----------------------------
+#     out = df.groupby(["bucket_time", "minute"]).agg(
+#         # Price aggregations
+#         open=("last_price", "first"),
+#         high=("last_price", "max"),
+#         low=("last_price", "min"),
+#         close=("last_price", "last"),
+#
+#         # Volume aggregations
+#         volume_open=("volume_at_tick", "first"),
+#         volume_high=("volume_at_tick", "max"),
+#         volume_low=("volume_at_tick", "min"),
+#         volume_close=("volume_at_tick", "last")
+#     ).reset_index()
+#
+#     # -----------------------------
+#     # Step 4: Attach candle type
+#     # -----------------------------
+#     out = out.merge(minute_ohlc[["minute", "candle_type", "minute_open", "minute_high", "minute_low", "minute_close", "depth_list", "ltp_list"]],
+#                     on="minute",
+#                     how="left")
+#     return out
 
 def tradingview_bb(close, length=20, mult=2.0):
     basis = close.rolling(length).mean()
@@ -441,6 +517,9 @@ def generate_signal(
     cond_4_sell = (df["open"] > df["close"]) & (df["open"] < df["open"].shift(1))
 
     # 2. Check for the streak using .sum() == window
+    # buy_cond_4_streak = cond_4_buy.rolling(window).sum() == window
+    # sell_cond_4_streak = cond_4_sell.rolling(window).sum() == window
+
     buy_cond_4_streak = cond_4_buy.rolling(window).sum() == window
     sell_cond_4_streak = cond_4_sell.rolling(window).sum() == window
 
