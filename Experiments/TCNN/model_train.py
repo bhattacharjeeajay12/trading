@@ -1,5 +1,5 @@
 # ===============================
-# model_train.py (CUDA ENABLED)
+# model_train.py
 # ===============================
 
 import torch
@@ -8,10 +8,13 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
 
+from sklearn.metrics import classification_report
+
 from data_pipeline import prepare_data
 
+
 # -------------------------------
-# DEVICE SETUP (GPU / CPU)
+# DEVICE
 # -------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
@@ -20,19 +23,22 @@ if device.type == "cuda":
     print("GPU:", torch.cuda.get_device_name(0))
 
 
-
 # -------------------------------
 # LOAD DATA
 # -------------------------------
 df = pd.read_csv(r"D:\Study\Programs\trading\Experiments\TCNN\data\data.csv")
 
-X_train, X_test, y_train, y_test, df = prepare_data(df)
-# df.to_csv(r"D:\Study\Programs\trading\Experiments\TCNN\data\processed_data.csv")
+X_train, X_test, y_train, y_test, df, num_classes = prepare_data(
+    df,
+    use_sell_label=False   # 🔥 TOGGLE HERE
+)
+
+
 # -------------------------------
-# CONVERT TO TORCH
+# TORCH CONVERSION
 # -------------------------------
-X_train = torch.tensor(X_train, dtype=torch.float32).permute(0, 2, 1)
-X_test  = torch.tensor(X_test, dtype=torch.float32).permute(0, 2, 1)
+X_train = torch.tensor(X_train, dtype=torch.float32).permute(0,2,1)
+X_test  = torch.tensor(X_test, dtype=torch.float32).permute(0,2,1)
 
 y_train = torch.tensor(y_train, dtype=torch.long)
 y_test  = torch.tensor(y_test, dtype=torch.long)
@@ -41,7 +47,7 @@ train_loader = DataLoader(
     TensorDataset(X_train, y_train),
     batch_size=256,
     shuffle=False,
-    pin_memory=True  # helps GPU transfer
+    pin_memory=True
 )
 
 
@@ -49,7 +55,7 @@ train_loader = DataLoader(
 # MODEL
 # -------------------------------
 class TemporalCNN(nn.Module):
-    def __init__(self, num_features, num_classes=3):
+    def __init__(self, num_features, num_classes):
         super().__init__()
 
         self.conv1 = nn.Conv1d(num_features, 32, kernel_size=3, padding=1)
@@ -69,12 +75,12 @@ class TemporalCNN(nn.Module):
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
 
-        x = x.mean(dim=2)  # global average pooling
+        x = x.mean(dim=2)
         x = self.dropout(x)
         return self.fc(x)
 
 
-model = TemporalCNN(num_features=X_train.shape[1]).to(device)
+model = TemporalCNN(X_train.shape[1], num_classes).to(device)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -83,7 +89,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 # -------------------------------
 # TRAINING LOOP
 # -------------------------------
-EPOCHS = 10
+EPOCHS = 200
 
 for epoch in range(EPOCHS):
     model.train()
@@ -105,6 +111,8 @@ for epoch in range(EPOCHS):
 
     print(f"Epoch {epoch+1}, Loss: {total_loss:.4f}")
 
+torch.save(model.state_dict(), "model.pth")
+
 
 # -------------------------------
 # EVALUATION
@@ -119,4 +127,13 @@ with torch.no_grad():
     preds = torch.argmax(logits, dim=1)
 
 accuracy = (preds == y_test).float().mean()
-print("Test Accuracy:", accuracy.item())
+print("\nTest Accuracy:", accuracy.item())
+
+# -------------------------------
+# CLASSIFICATION REPORT
+# -------------------------------
+y_true = y_test.cpu().numpy()
+y_pred = preds.cpu().numpy()
+
+print("\nClassification Report:\n")
+print(classification_report(y_true, y_pred))
