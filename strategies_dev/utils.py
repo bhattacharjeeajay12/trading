@@ -155,9 +155,8 @@ def resample_fractional_minute(original_df, time_col, n=4, depth=True):
         minute_close=("last_price", "last"),
     )
 
-    if depth:
-        agg_dict["depth_list"] = ("depth", list)
-        agg_dict["ltp_list"] = ("last_price", list)
+    agg_dict["depth_list"] = ("depth", list)
+    agg_dict["ltp_list"] = ("last_price", list)
 
     minute_ohlc = (
         df.groupby("minute")
@@ -210,6 +209,43 @@ def resample_fractional_minute(original_df, time_col, n=4, depth=True):
         "minute_close"
     ]
 
+    # -----------------------------
+    # Step 5: Close to Ask or Bid
+    # -----------------------------
+    if depth:
+        def get_best_bid_ask(depth_list):
+            # adjust depending on your depth structure
+            bids = []
+            asks = []
+            for d in depth_list:
+                if isinstance(d, dict):
+                    if "bid" in d and "ask" in d:
+                        bids.append(d["bid"])
+                        asks.append(d["ask"])
+            return (
+                np.nanmean(bids) if bids else np.nan,
+                np.nanmean(asks) if asks else np.nan
+            )
+
+        # extract avg bid/ask per minute
+        bid_ask = minute_ohlc["depth_list"].apply(get_best_bid_ask)
+        minute_ohlc["avg_bid"] = [x[0] for x in bid_ask]
+        minute_ohlc["avg_ask"] = [x[1] for x in bid_ask]
+
+        # merge into output
+        out = out.merge(
+            minute_ohlc[["minute", "avg_bid", "avg_ask"]],
+            on="minute",
+            how="left"
+        )
+
+        # determine closeness
+        out["close_to"] = np.where(
+            abs(out["close"] - out["avg_ask"]) < abs(out["close"] - out["avg_bid"]),
+            "Ask",
+            "Bid"
+        )
+
     if depth:
         merge_cols += ["depth_list", "ltp_list"]
 
@@ -220,6 +256,58 @@ def resample_fractional_minute(original_df, time_col, n=4, depth=True):
     )
 
     return out
+
+def flatten_depth(row):
+    depth = row['depth']
+    data = {}
+
+    for i in range(5):
+        if i < len(depth['buy']):
+            data[f'bid_p{i+1}'] = depth['buy'][i]['price']
+            data[f'bid_q{i+1}'] = depth['buy'][i]['quantity']
+        else:
+            data[f'bid_p{i+1}'] = None
+            data[f'bid_q{i+1}'] = None
+
+    for i in range(5):
+        if i < len(depth['sell']):
+            data[f'ask_p{i+1}'] = depth['sell'][i]['price']
+            data[f'ask_q{i+1}'] = depth['sell'][i]['quantity']
+        else:
+            data[f'ask_p{i+1}'] = None
+            data[f'ask_q{i+1}'] = None
+
+    return pd.Series(data)
+
+def getAggregatedVolume(tns, n):
+    # 1. Map n to the required frequency strings
+    freq_map = {
+        1: '1min',
+        2: '30s',
+        3: '20s',
+        4: '15s'
+    }
+
+    # Handle the "and so on" logic if n > 4 (e.g., n=5 -> 12s, n=6 -> 10s)
+    # Frequency (seconds) = 60 / n
+    freq = freq_map.get(n, f"{int(60/n)}s")
+
+    # 2. Ensure timestamp is a datetime object (crucial for resampling)
+    # We create a temporary copy to avoid modifying the original dataframe
+    temp_df = tns.copy()
+    temp_df['timestamp'] = pd.to_datetime(temp_df['timestamp'], dayfirst=True)
+
+    # 3. Perform Resampling
+    # 'label=left' ensures the timestamp is the START of the bucket
+    agg_df = temp_df.resample(freq, on='timestamp').agg({
+        'quantity': 'sum'
+    }).reset_index()
+
+    # 4. Format the bucket_timestamp back to your required string format
+    agg_df.rename(columns={'timestamp': 'bucket_timestamp'}, inplace=True)
+    agg_df['bucket_timestamp'] = agg_df['bucket_timestamp'].dt.strftime('%d-%m-%Y %H:%M:%S')
+
+    return agg_df
 
 # def resample_fractional_minute(original_df, time_col, n=4, depth=True):
 #     df = original_df.copy()
