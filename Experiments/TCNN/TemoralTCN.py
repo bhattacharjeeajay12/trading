@@ -1,15 +1,16 @@
 # ===============================
-# model_train.py
+# model_train.py (TCN VERSION)
 # ===============================
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
+import numpy as np
 
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, recall_score
 
+from pytorch_tcn import TCN
 from data_pipeline import prepare_data
 
 
@@ -30,19 +31,36 @@ df = pd.read_csv(r"D:\Study\Programs\trading\Experiments\TCNN\data\data.csv")
 
 X_train, X_test, y_train, y_test, df, num_classes = prepare_data(
     df,
-    use_sell_label=False   # 🔥 TOGGLE HERE
+    use_sell_label=False,     # binary: BUY vs NOT BUY
+    seq_len=120               # 🔥 longer context for TCN
 )
 
 
 # -------------------------------
 # TORCH CONVERSION
 # -------------------------------
-X_train = torch.tensor(X_train, dtype=torch.float32).permute(0,2,1)
-X_test  = torch.tensor(X_test, dtype=torch.float32).permute(0,2,1)
+X_train = torch.tensor(X_train, dtype=torch.float32).permute(0, 2, 1)
+X_test  = torch.tensor(X_test, dtype=torch.float32).permute(0, 2, 1)
 
 y_train = torch.tensor(y_train, dtype=torch.long)
 y_test  = torch.tensor(y_test, dtype=torch.long)
 
+
+# -------------------------------
+# CLASS WEIGHTS (CRITICAL)
+# -------------------------------
+class_counts = np.bincount(y_train.numpy())
+print("Class counts:", class_counts)
+
+ratio = class_counts[0] / (class_counts[1] + 1e-6)
+weights = torch.tensor([1.0, ratio], dtype=torch.float32).to(device)
+
+print("Using weights:", weights)
+
+
+# -------------------------------
+# DATALOADER
+# -------------------------------
 train_loader = DataLoader(
     TensorDataset(X_train, y_train),
     batch_size=256,
@@ -52,44 +70,40 @@ train_loader = DataLoader(
 
 
 # -------------------------------
-# MODEL
+# TCN MODEL
 # -------------------------------
-class TemporalCNN(nn.Module):
+class Temporalc(nn.Module):
     def __init__(self, num_features, num_classes):
         super().__init__()
 
-        self.conv1 = nn.Conv1d(num_features, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm1d(32)
+        self.tcn = TCN(
+            num_inputs=num_features,
+            num_channels=[32, 64, 64],
+            kernel_size=3,
+            dropout=0.2
+        )
 
-        self.conv2 = nn.Conv1d(32, 64, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm1d(64)
-
-        self.conv3 = nn.Conv1d(64, 64, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm1d(64)
-
-        self.dropout = nn.Dropout(0.2)
         self.fc = nn.Linear(64, num_classes)
 
     def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
+        # x shape: (batch, features, seq_len)
 
-        x = x.mean(dim=2)
-        x = self.dropout(x)
+        x = self.tcn(x)              # (batch, channels, seq_len)
+        x = x[:, :, -1]              # last timestep
+
         return self.fc(x)
 
 
-model = TemporalCNN(X_train.shape[1], num_classes).to(device)
+model = TemporalTCN(X_train.shape[1], num_classes).to(device)
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(weight=weights)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 
 # -------------------------------
-# TRAINING LOOP
+# TRAINING
 # -------------------------------
-EPOCHS = 200
+EPOCHS = 100
 
 for epoch in range(EPOCHS):
     model.train()
@@ -111,7 +125,11 @@ for epoch in range(EPOCHS):
 
     print(f"Epoch {epoch+1}, Loss: {total_loss:.4f}")
 
-torch.save(model.state_dict(), "model.pth")
+
+# -------------------------------
+# SAVE MODEL
+# -------------------------------
+torch.save(model.state_dict(), "model_tcn.pth")
 
 
 # -------------------------------
@@ -124,10 +142,15 @@ y_test = y_test.to(device)
 
 with torch.no_grad():
     logits = model(X_test)
-    preds = torch.argmax(logits, dim=1)
+
+    # probabilities
+    probs = torch.softmax(logits, dim=1)
+
+    preds = torch.argmax(probs, dim=1)
 
 accuracy = (preds == y_test).float().mean()
 print("\nTest Accuracy:", accuracy.item())
+
 
 # -------------------------------
 # CLASSIFICATION REPORT
@@ -137,3 +160,29 @@ y_pred = preds.cpu().numpy()
 
 print("\nClassification Report:\n")
 print(classification_report(y_true, y_pred))
+
+buy_recall = recall_score(y_true, y_pred, pos_label=1)
+print("BUY Recall:", buy_recall)
+
+
+# -------------------------------
+# PROBABILITY ANALYSIS
+# -------------------------------
+buy_probs = probs[:, 1].cpu().numpy()
+
+df.loc[df['split'] == 'test', 'buy_prob'] = buy_probs
+
+print("\nSample probabilities:")
+print(df[['buy_prob']].dropna().head())
+
+
+# -------------------------------
+# OPTIONAL: THRESHOLD TESTING
+# -------------------------------
+print("\n--- Threshold Experiments ---")
+
+for t in [0.5, 0.6, 0.7, 0.8, 0.9]:
+    preds_t = (buy_probs > t).astype(int)
+
+    print(f"\nThreshold: {t}")
+    print(classification_report(y_true, preds_t))

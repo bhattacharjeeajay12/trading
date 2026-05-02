@@ -8,8 +8,8 @@ import numpy as np
 
 def prepare_data(
     df,
-    seq_len=60,
-    horizon_sec=30,
+    seq_len=200,
+    horizon_sec=60,
     threshold=0.03,
     use_sell_label=True,
     export_path=r"D:\Study\Programs\trading\Experiments\TCNN\data\processed_with_split.csv"
@@ -67,6 +67,8 @@ def prepare_data(
     df['tick_speed'] = 1 / (df['dt'] + 1e-6)
     df['activity_10'] = df['dt'].rolling(10).mean().fillna(0)
 
+    df['imbalance_trend'] = df['orderbook_imbalance'].rolling(20).mean().fillna(0)
+
     # -------------------------------
     # TARGET LABELING
     # -------------------------------
@@ -93,9 +95,9 @@ def prepare_data(
     # Label function
     def label_fn(x):
         """
-            1 is BUY
-            0 is OTHER
-            -1 is SELL
+            1 is BUY --> 2
+            0 is OTHER --> 1
+            -1 is SELL --> 0
         """
 
         if x > threshold:
@@ -119,7 +121,8 @@ def prepare_data(
     features = [
         'price_return','price_velocity','trade_size','volume_change',
         'spread','mid_price','orderbook_imbalance','l1_imbalance',
-        'trade_to_mid','is_buy','is_sell','tick_speed','activity_10'
+        'trade_to_mid','is_buy','is_sell','tick_speed','activity_10',
+        'imbalance_trend'
     ]
 
     data = df[features].values
@@ -235,11 +238,14 @@ def prepare_inference_data(df, mean, std, seq_len=60):
     df['tick_speed'] = 1 / (df['dt'] + 1e-6)
     df['activity_10'] = df['dt'].rolling(10).mean().fillna(0)
 
+    df['imbalance_trend'] = df['orderbook_imbalance'].rolling(20).mean().fillna(0)
+
     # --- FEATURES ---
     features = [
         'price_return','price_velocity','trade_size','volume_change',
         'spread','mid_price','orderbook_imbalance','l1_imbalance',
-        'trade_to_mid','is_buy','is_sell','tick_speed','activity_10'
+        'trade_to_mid','is_buy','is_sell','tick_speed','activity_10',
+        'imbalance_trend'
     ]
 
     data = df[features].values
