@@ -14,7 +14,7 @@ MODE = "optimize"
 # File paths
 # -----------------------------
 # Point INPUT_EXCEL_FILE to one option-instrument Excel file for one trading day.
-INPUT_EXCEL_FILE = Path("input_ticks.xlsx")
+INPUT_EXCEL_FILE = Path(r"D:\Study\Programs\trading\assets\logs\23APR2026\extracted_symbols\NIFTY26APR24150CE.xlsx")
 OUTPUT_EXCEL_FILE = Path("speed_analysis_output.xlsx")
 
 

@@ -3,7 +3,7 @@ import itertools
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-
+import ast
 import numpy as np
 import pandas as pd
 
@@ -22,7 +22,6 @@ class ParameterSet:
 
 REQUIRED_COLUMNS = list(cfg.REQUIRED_COLUMNS)
 
-
 def _safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     denominator = denominator.replace(0, np.nan)
     return numerator / denominator
@@ -33,10 +32,42 @@ def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [str(col).strip().lower() for col in df.columns]
     return df
 
+def flatten_depth(row):
+    depth = row['depth']
+    data = {}
+
+    for side, prefix in [('buy', 'bid'), ('sell', 'ask')]:
+        for i in range(5):
+            entry = depth[side][i] if i < len(depth[side]) else {}
+            data[f'{prefix}_price_{i+1}'] = entry.get('price')
+            data[f'{prefix}_qty_{i+1}']   = entry.get('quantity')
+    return pd.Series(data)
+
+
+def update_volume(row):
+    """
+    Since volume_traded is cumulative, each tick alone doesn't convey the per-tick volume.
+    This function returns the per-tick delta.
+    """
+    if row['volume_traded'] == row['volume_traded_prev']:
+        return np.nan
+    return row['volume_traded'] - row['volume_traded_prev']
 
 def load_and_clean_ticks(input_path: Path) -> pd.DataFrame:
     """Load one option tick file and enforce the expected analysis schema."""
     df = pd.read_excel(input_path)
+    df['last_trade_time'] = pd.to_datetime(df['last_trade_time'])
+    df = df.sort_values('last_trade_time').reset_index(drop=True)
+
+    if 'depth' in df.columns:
+        df['depth'] = df.apply(lambda row: ast.literal_eval(row['depth']), axis=1)
+        df = df.join(df.apply(flatten_depth, axis=1, result_type='expand'))
+
+    if 'volume_traded' in df.columns:
+        df['volume_traded_prev'] = df['volume_traded'].shift(1)
+        df['volume_traded'] = df.apply(lambda row: update_volume(row), axis=1)
+        df['volume_traded'] = df['volume_traded'].ffill()
+    df = df.drop_duplicates(subset=['depth'])
     df = _normalise_columns(df)
 
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
