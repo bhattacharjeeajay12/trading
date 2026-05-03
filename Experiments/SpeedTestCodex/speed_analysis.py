@@ -21,6 +21,26 @@ class ParameterSet:
 
 
 REQUIRED_COLUMNS = list(cfg.REQUIRED_COLUMNS)
+SIGNAL_OUTPUT_COLUMNS = [
+    "entry_index",
+    "entry_time",
+    "entry_price",
+    "direction",
+    "speed_points_per_sec",
+    "acceleration_points_per_sec2",
+    "exit_time",
+    "exit_price",
+    "outcome",
+    "is_success",
+    "signed_move_points",
+    "holding_seconds",
+    "window_seconds",
+    "speed_threshold",
+    "acceleration_threshold",
+    "target_points",
+    "stop_loss_points",
+    "max_holding_seconds",
+]
 
 def _safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     denominator = denominator.replace(0, np.nan)
@@ -273,7 +293,7 @@ def label_signals(signal_df: pd.DataFrame, params: ParameterSet) -> pd.DataFrame
             }
         )
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=SIGNAL_OUTPUT_COLUMNS)
 
 
 def score_parameter_set(trades: pd.DataFrame, total_rows: int, params: ParameterSet) -> Dict[str, float]:
@@ -371,7 +391,7 @@ def run_optimize(clean_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     signal_details = (
         pd.concat(all_signal_rows, ignore_index=True)
         if all_signal_rows
-        else pd.DataFrame()
+        else pd.DataFrame(columns=SIGNAL_OUTPUT_COLUMNS)
     )
 
     return {
