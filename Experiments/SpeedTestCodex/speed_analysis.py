@@ -312,7 +312,8 @@ def _segment_precisions(trades: pd.DataFrame, segments: int = 3) -> List[float]:
         return []
 
     ordered = trades.sort_values("entry_time").reset_index(drop=True)
-    chunks = [chunk for chunk in np.array_split(ordered, segments) if not chunk.empty]
+    split_indexes = np.array_split(np.arange(len(ordered)), segments)
+    chunks = [ordered.iloc[indexes] for indexes in split_indexes if len(indexes) > 0]
     return [float(chunk["is_success"].mean()) for chunk in chunks]
 
 
