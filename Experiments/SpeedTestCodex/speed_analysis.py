@@ -87,7 +87,7 @@ def load_and_clean_ticks(input_path: Path) -> pd.DataFrame:
         df['volume_traded_prev'] = df['volume_traded'].shift(1)
         df['volume_traded'] = df.apply(lambda row: update_volume(row), axis=1)
         df['volume_traded'] = df['volume_traded'].ffill()
-    df = df.drop_duplicates(subset=['depth'])
+    df = df.drop(columns=['depth'])
     df = _normalise_columns(df)
     print(df.columns)
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
