@@ -7,7 +7,7 @@ from pathlib import Path
 # Supported values:
 # - "optimize": test parameter combinations and rank them by prediction quality.
 # - "playback": run one selected parameter set and export detailed diagnostics.
-MODE = "optimize"
+MODE = "playback"
 
 
 # -----------------------------

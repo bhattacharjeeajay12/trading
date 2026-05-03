@@ -69,7 +69,7 @@ def load_and_clean_ticks(input_path: Path) -> pd.DataFrame:
         df['volume_traded'] = df['volume_traded'].ffill()
     df = df.drop_duplicates(subset=['depth'])
     df = _normalise_columns(df)
-
+    print(df.columns)
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     if missing:
         raise ValueError(f"Input file is missing required columns: {missing}")
