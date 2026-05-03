@@ -296,6 +296,30 @@ def label_signals(signal_df: pd.DataFrame, params: ParameterSet) -> pd.DataFrame
     return pd.DataFrame(rows, columns=SIGNAL_OUTPUT_COLUMNS)
 
 
+def build_empty_signal_report(params: ParameterSet) -> pd.DataFrame:
+    """Return one explicit row so Excel clearly shows that no signals fired."""
+    return pd.DataFrame(
+        [
+            {
+                "entry_index": np.nan,
+                "entry_time": pd.NaT,
+                "entry_price": np.nan,
+                "direction": "undetermined",
+                "speed_points_per_sec": np.nan,
+                "acceleration_points_per_sec2": np.nan,
+                "exit_time": pd.NaT,
+                "exit_price": np.nan,
+                "outcome": "no_signal",
+                "is_success": False,
+                "signed_move_points": np.nan,
+                "holding_seconds": np.nan,
+                **asdict(params),
+            }
+        ],
+        columns=SIGNAL_OUTPUT_COLUMNS,
+    )
+
+
 def score_parameter_set(trades: pd.DataFrame, total_rows: int, params: ParameterSet) -> Dict[str, float]:
     signal_count = len(trades)
     success_count = int(trades["is_success"].sum()) if signal_count else 0
@@ -355,12 +379,13 @@ def run_playback(clean_df: pd.DataFrame, params: ParameterSet) -> Dict[str, pd.D
     signals = generate_signals(features, params)
     trades = label_signals(signals, params)
     summary = pd.DataFrame([score_parameter_set(trades, len(signals), params)])
+    report_trades = trades if not trades.empty else build_empty_signal_report(params)
     return {
         "cleaned_input": clean_df,
         "features": signals,
-        "signals": trades,
+        "signals": report_trades,
         "optimization_summary": summary,
-        "playback_report": trades,
+        "playback_report": report_trades,
     }
 
 
@@ -387,11 +412,12 @@ def run_optimize(clean_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         best_params,
     )
     best_trades = label_signals(best_features, best_params)
+    best_report_trades = best_trades if not best_trades.empty else build_empty_signal_report(best_params)
 
     signal_details = (
         pd.concat(all_signal_rows, ignore_index=True)
         if all_signal_rows
-        else pd.DataFrame(columns=SIGNAL_OUTPUT_COLUMNS)
+        else build_empty_signal_report(best_params)
     )
 
     return {
@@ -399,7 +425,7 @@ def run_optimize(clean_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         "features": best_features,
         "signals": signal_details,
         "optimization_summary": summary,
-        "playback_report": best_trades,
+        "playback_report": best_report_trades,
     }
 
 
